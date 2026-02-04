@@ -12,7 +12,7 @@ export default function ServerLayout() {
       }}
     >
       <Stack.Screen
-        name="[id]"
+        name="[serverId]"
         options={{
           title: "Server",
         }}

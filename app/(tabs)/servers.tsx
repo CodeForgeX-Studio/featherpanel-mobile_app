@@ -1,29 +1,75 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useApp } from '@/contexts/AppContext';
-import { createApiClient } from '@/lib/api';
-import type { Server } from '@/types/api';
+import { createApiClient, handleApiError } from '@/lib/api';
+import type { Server, ServersEnvelope } from '@/types/api';
 import Colors from '@/constants/colors';
-import { Server as ServerIcon, AlertCircle } from 'lucide-react-native';
+import { Server as ServerIcon, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ServersScreen() {
-  const { instanceUrl, authToken } = useApp();
+  const { instanceUrl, authToken, clearAuth } = useApp();
   const router = useRouter();
 
-  const { data, isLoading, error, refetch, isRefetching } = useQuery({
+  const {
+    data: servers,
+    isLoading,
+    error,
+    refetch,
+    isRefetching,
+  } = useQuery<Server[], Error>({
     queryKey: ['servers', instanceUrl, authToken],
     queryFn: async () => {
-      if (!instanceUrl || !authToken) throw new Error('Not authenticated');
-      
-      const api = createApiClient(instanceUrl, authToken);
-      const response = await api.get<{ servers: Server[] }>('/api/user/servers');
-      return response.data.servers;
+      if (!instanceUrl || !authToken) {
+        throw new Error('Not authenticated');
+      }
+
+      try {
+        const api = createApiClient(instanceUrl, authToken);
+
+        const response = await api.get<ServersEnvelope>(
+          '/api/user/servers?view_all=true&page=1&per_page=10'
+        );
+
+        if (!response.data.success || response.data.error) {
+          const code = response.data.error_code;
+          const message =
+            response.data.error_message || response.data.message || 'Failed to fetch servers';
+
+          if (code === 'INVALID_ACCOUNT_TOKEN') {
+            await clearAuth().catch(() => undefined);
+            router.replace('/');
+          }
+
+          throw new Error(message);
+        }
+
+        if (!response.data.data) {
+          return [];
+        }
+
+        return response.data.data.servers;
+      } catch (err: any) {
+        const msg = handleApiError(err);
+        throw new Error(msg);
+      }
     },
     enabled: !!instanceUrl && !!authToken,
   });
+
+  const handleManualRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -34,6 +80,7 @@ export default function ServersScreen() {
         return Colors.dark.danger;
       case 'starting':
       case 'stopping':
+      case 'installing':
         return Colors.dark.warning;
       default:
         return Colors.dark.textMuted;
@@ -43,7 +90,9 @@ export default function ServersScreen() {
   const renderServer = ({ item }: { item: Server }) => (
     <TouchableOpacity
       style={styles.serverCard}
-      onPress={() => router.push(`/server/${item.uuidShort}`)}
+      onPress={() => {
+        router.push(`/server/${item.uuidShort}`);
+      }}
       testID={`server-${item.uuidShort}`}
     >
       <View style={styles.serverHeader}>
@@ -66,7 +115,7 @@ export default function ServersScreen() {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.serverDetails}>
         <View style={styles.detailItem}>
           <Text style={styles.detailLabel}>RAM</Text>
@@ -104,8 +153,13 @@ export default function ServersScreen() {
     return (
       <View style={styles.centerContainer}>
         <AlertCircle size={48} color={Colors.dark.danger} />
-        <Text style={styles.errorText}>Failed to load servers</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+        <Text style={styles.errorText}>{error.message || 'Failed to load servers'}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            refetch();
+          }}
+        >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -114,8 +168,23 @@ export default function ServersScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Servers</Text>
+        <TouchableOpacity
+          style={[styles.refreshButton, isRefetching && styles.refreshButtonLoading]}
+          onPress={handleManualRefresh}
+          disabled={isRefetching}
+        >
+          {isRefetching ? (
+            <ActivityIndicator size="small" color={Colors.dark.text} />
+          ) : (
+            <RefreshCw size={20} color={Colors.dark.text} />
+          )}
+        </TouchableOpacity>
+      </View>
+
       <FlatList
-        data={data || []}
+        data={servers || []}
         renderItem={renderServer}
         keyExtractor={(item) => item.uuid}
         contentContainerStyle={styles.listContent}
@@ -144,6 +213,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.dark.bg,
+  },
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.bgSecondary,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  refreshButtonLoading: {
+    opacity: 0.7,
   },
   centerContainer: {
     flex: 1,

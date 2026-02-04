@@ -86,6 +86,7 @@ export default function AuthScreen() {
         router.replace('/(tabs)/servers');
       }
     } catch (err: any) {
+
       const apiEnvelope = (err?.response?.data || err?.data || null) as Partial<ApiEnvelope<unknown>> | null;
 
       if (apiEnvelope) {

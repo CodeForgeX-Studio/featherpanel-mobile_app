@@ -281,18 +281,6 @@ export default function ProfileScreen() {
         <View style={styles.tabContentContainer}>
           {renderTabContent()}
         </View>
-
-        <View style={styles.footer}>
-          <Image
-            source={require('@/assets/images/featherpanel-logo.png')}
-            style={styles.footerLogo}
-            contentFit="contain"
-          />
-          <Text style={styles.footerText}>FeatherPanel Mobile</Text>
-          <Text style={styles.footerSubtext}>
-            Built by CodeForgeX Studio
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

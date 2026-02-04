@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Server } from '@/types/api';
 
 export default function ServerDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const { instanceUrl, authToken } = useApp();
   const [command, setCommand] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -18,28 +18,28 @@ export default function ServerDetailsScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const { data: server, isLoading, error, refetch } = useQuery({
-    queryKey: ['server', id, instanceUrl, authToken],
+    queryKey: ['server', serverId, instanceUrl, authToken],
     queryFn: async () => {
-      if (!instanceUrl || !authToken || !id) throw new Error('Missing data');
+      if (!instanceUrl || !authToken || !serverId) throw new Error('Missing data');
       
       const api = createApiClient(instanceUrl, authToken);
-      const response = await api.get<Server>(`/api/user/servers/${id}`);
+      const response = await api.get<Server>(`/api/user/servers/${serverId}`);
       return response.data;
     },
-    enabled: !!instanceUrl && !!authToken && !!id,
+    enabled: !!instanceUrl && !!authToken && !!serverId,
     refetchInterval: 5000,
   });
 
   const { data: serverLogs } = useQuery({
-    queryKey: ['serverLogs', id, instanceUrl, authToken],
+    queryKey: ['serverLogs', serverId, instanceUrl, authToken],
     queryFn: async () => {
-      if (!instanceUrl || !authToken || !id) throw new Error('Missing data');
+      if (!instanceUrl || !authToken || !serverId) throw new Error('Missing data');
       
       const api = createApiClient(instanceUrl, authToken);
-      const response = await api.get<{ response: string[] }>(`/api/user/servers/${id}/logs`);
+      const response = await api.get<{ response: string[] }>(`/api/user/servers/${serverId}/logs`);
       return response.data.response;
     },
-    enabled: !!instanceUrl && !!authToken && !!id,
+    enabled: !!instanceUrl && !!authToken && !!serverId,
     refetchInterval: 3000,
   });
 
@@ -59,10 +59,10 @@ export default function ServerDetailsScreen() {
 
   const powerMutation = useMutation({
     mutationFn: async (action: 'start' | 'stop' | 'restart' | 'kill') => {
-      if (!instanceUrl || !authToken || !id) throw new Error('Missing data');
+      if (!instanceUrl || !authToken || !serverId) throw new Error('Missing data');
       
       const api = createApiClient(instanceUrl, authToken);
-      await api.post(`/api/user/servers/${id}/power/${action}`);
+      await api.post(`/api/user/servers/${serverId}/power/${action}`);
     },
     onSuccess: () => {
       refetch();
@@ -74,10 +74,10 @@ export default function ServerDetailsScreen() {
 
   const commandMutation = useMutation({
     mutationFn: async (cmd: string) => {
-      if (!instanceUrl || !authToken || !id) throw new Error('Missing data');
+      if (!instanceUrl || !authToken || !serverId) throw new Error('Missing data');
       
       const api = createApiClient(instanceUrl, authToken);
-      await api.post(`/api/user/servers/${id}/command`, { command: cmd });
+      await api.post(`/api/user/servers/${serverId}/command`, { command: cmd });
     },
     onSuccess: () => {
       setCommand('');

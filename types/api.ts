@@ -41,31 +41,51 @@ export interface Server {
   uuid: string;
   uuidShort: string;
   name: string;
-  description?: string;
+  description?: string | null;
   status: string;
+  suspended?: number;
   memory: number;
+  swap?: number;
   disk: number;
+  io?: number;
   cpu: number;
+  threads?: string | null;
   node?: {
     name?: string;
+    maintenance_mode?: number;
     fqdn?: string;
+    behind_proxy?: number;
+  };
+  location?: {
+    id: number;
+    name: string;
+    description?: string | null;
+    flag_code: string;
   };
   realm?: {
     name?: string;
+    description?: string;
+    logo?: string | null;
   };
   spell?: {
     name?: string;
+    description?: string;
+    banner?: string;
   };
   allocation?: {
     ip?: string;
     port?: number;
+    ip_alias?: string;
   };
-}
-
-export interface LoginRequest {
-  username_or_email: string;
-  password: string;
-  turnstile_token?: string;
+  owner_id?: number;
+  skip_zerotrust?: number;
+  oom_disabled?: number;
+  allocation_limit?: number;
+  database_limit?: number;
+  backup_limit?: number;
+  is_subuser?: boolean;
+  subuser_permissions?: string[];
+  subuser_id?: number | null;
 }
 
 export interface ApiErrorItem {
@@ -82,6 +102,12 @@ export interface ApiEnvelope<T> {
   error_message: string | null;
   error_code: string | null;
   errors?: ApiErrorItem[];
+}
+
+export interface LoginRequest {
+  username_or_email: string;
+  password: string;
+  turnstile_token?: string;
 }
 
 export interface LoginData {
@@ -124,3 +150,23 @@ export interface ApiError {
   error_code?: string;
   errors?: ApiErrorItem[];
 }
+
+export interface ServersPayload {
+  servers: Server[];
+  pagination: {
+    current_page: number;
+    per_page: number;
+    total_records: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+    from: number;
+    to: number;
+  };
+  search: {
+    query: string;
+    has_results: boolean;
+  };
+}
+
+export type ServersEnvelope = ApiEnvelope<ServersPayload>;
