@@ -24,7 +24,7 @@ export default function Index() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
-        }, 2500);
+        }, 5000);
 
         const response = await fetch(instanceUrl, {
           method: 'GET',
@@ -43,7 +43,7 @@ export default function Index() {
       }
     };
 
-    const interval = setInterval(checkServerStatus, 5000);
+    const interval = setInterval(checkServerStatus, 10000);
     checkServerStatus();
 
     return () => {
@@ -62,7 +62,7 @@ export default function Index() {
     
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch(instanceUrl, {
         method: 'GET',
