@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Alert, Linking } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
-import { Folder, File, Download, Trash2, Edit, Plus, Upload, RefreshCw } from 'lucide-react-native';
+import { createApiClient } from '@/lib/api';
+import { Folder, FileText, RefreshCw, Eye, Plus, FolderPlus, ChevronLeft, Save } from 'lucide-react-native';
 
 interface FileItem {
   name: string;
@@ -17,27 +18,57 @@ interface FileItem {
 
 export default function ServerFilesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { apiClient } = useApp();
+  const router = useRouter();
+  const { instanceUrl, authToken } = useApp();
   const queryClient = useQueryClient();
   const [currentPath, setCurrentPath] = useState('/');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: files, isLoading, error, refetch } = useQuery<FileItem[]>({
-    queryKey: ['server-files', id, currentPath],
+  const {
+    data: apiResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['server-files', id, currentPath, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const response = await apiClient.get(`/api/user/servers/${id}/files`, {
-        params: { path: currentPath },
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/files`, {
+        params: { path: currentPath }
       });
-      return response.data.contents || [];
+
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch files';
+        throw new Error(message);
+      }
+
+      return response.data;
     },
-    enabled: !!apiClient && !!id,
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    staleTime: 0,
   });
+
+  const files: FileItem[] = apiResponse?.data?.contents?.map((item: any) => ({
+    name: item.name,
+    type: item.directory ? 'directory' : 'file',
+    size: item.directory ? null : item.size,
+    modified_at: item.modified,
+    path: currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`,
+  })) || [];
 
   const deleteMutation = useMutation({
     mutationFn: async (file: FileItem) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.delete(`/api/user/servers/${id}/delete-files`, {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+
+      const api = createApiClient(instanceUrl, authToken);
+      await api.delete(`/api/user/servers/${id}/delete-files`, {
         data: {
           files: [file.path],
           root: currentPath,
@@ -49,29 +80,95 @@ export default function ServerFilesScreen() {
     },
   });
 
+  const readFileMutation = useMutation({
+    mutationFn: async (file: FileItem) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/file`, {
+        params: { path: file.path }
+      });
+
+      if (response.status !== 200) {
+        throw new Error(response.data?.error_message || response.data?.message || 'Failed to read file');
+      }
+
+      const content = response.data;
+      return { content, file };
+    },
+    onSuccess: ({ content, file }) => {
+      router.push({
+        pathname: `/server/${id}/files/edit`,
+        params: { 
+          id, 
+          path: file.path.slice(1), 
+          filename: file.name,
+          content: encodeURIComponent(content || '')
+        }
+      });
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to load file content');
+    }
+  });
+
+  const showWebOnlyAlert = (name: string, features: string) => {
+    Alert.alert(
+      `${name}`,
+      `${features} are only available in the web version right now.\n\nOpen web interface?`,
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Open Web', 
+          onPress: async () => {
+            const webUrl = `${instanceUrl}/server/${id}/files`;
+            try {
+              const supported = await Linking.canOpenURL(webUrl);
+              if (supported) {
+                await Linking.openURL(webUrl);
+              } else {
+                Alert.alert('Web URL', webUrl);
+              }
+            } catch (error) {
+              Alert.alert('Web URL', webUrl);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleFilePress = (file: FileItem) => {
     if (file.type === 'directory') {
-      setCurrentPath(file.path);
+      Alert.alert(
+        file.name,
+        'Folder actions',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open', onPress: () => setCurrentPath(file.path) },
+          { text: 'Delete', onPress: () => confirmDelete(file), style: 'destructive' },
+          { text: 'Rename/Move → Web', onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions') }
+        ]
+      );
     } else {
       Alert.alert(
         file.name,
-        'What would you like to do?',
+        'File actions',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Download', onPress: () => downloadFile(file) },
+          { text: 'Edit', onPress: () => readFileMutation.mutate(file) },
           { text: 'Delete', onPress: () => confirmDelete(file), style: 'destructive' },
+          { text: 'Rename/Copy → Web', onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions') }
         ]
       );
     }
   };
 
-  const downloadFile = (file: FileItem) => {
-    Alert.alert('Download', `Download URL: ${apiClient?.defaults.baseURL}/api/user/servers/${id}/download-file?path=${encodeURIComponent(file.path)}`);
-  };
-
   const confirmDelete = (file: FileItem) => {
     Alert.alert(
-      'Delete File',
+      'Delete File/Folder',
       `Are you sure you want to delete ${file.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -80,15 +177,16 @@ export default function ServerFilesScreen() {
     );
   };
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    setCurrentPath(parts.length === 0 ? '/' : '/' + parts.join('/'));
-  };
+    const newPath = parts.length === 0 ? '/' : '/' + parts.join('/');
+    setCurrentPath(newPath);
+  }, [currentPath]);
 
-  const filteredFiles = files?.filter(f => 
+  const filteredFiles = files.filter(f => 
     f.name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  );
 
   const formatFileSize = (bytes: number | null): string => {
     if (bytes === null) return '-';
@@ -109,7 +207,7 @@ export default function ServerFilesScreen() {
           <Text style={styles.currentPath}>{currentPath}</Text>
         </View>
         
-        <View style={styles.searchContainer}>
+        <View style={styles.actionContainer}>
           <TextInput
             style={styles.searchInput}
             placeholder="Search files..."
@@ -117,8 +215,26 @@ export default function ServerFilesScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          <TouchableOpacity style={styles.refreshIconButton} onPress={() => refetch()}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => refetch()}>
             <RefreshCw size={20} color={Colors.dark.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => router.push({
+              pathname: `/server/${id}/files/create`,
+              params: { path: currentPath }
+            })}
+          >
+            <Plus size={20} color={Colors.dark.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => router.push({
+              pathname: `/server/${id}/files/create-folder`,
+              params: { path: currentPath }
+            })}
+          >
+            <FolderPlus size={20} color={Colors.dark.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -129,7 +245,14 @@ export default function ServerFilesScreen() {
         </View>
       ) : error ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Failed to load files</Text>
+          <Text style={styles.errorText}>Failed to load files{'\n'}{error.message}</Text>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : files.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No files found</Text>
         </View>
       ) : (
         <FlatList
@@ -139,13 +262,15 @@ export default function ServerFilesScreen() {
             <TouchableOpacity
               style={styles.fileItem}
               onPress={() => handleFilePress(item)}
-              testID={`file-${item.name}`}
             >
               <View style={styles.fileIcon}>
                 {item.type === 'directory' ? (
                   <Folder size={24} color={Colors.dark.primary} />
                 ) : (
-                  <File size={24} color={Colors.dark.textSecondary} />
+                  <View style={styles.fileIconContainer}>
+                    <FileText size={20} color={Colors.dark.textSecondary} />
+                    <Eye size={16} color={Colors.dark.primary} style={styles.editIcon} />
+                  </View>
                 )}
               </View>
               <View style={styles.fileInfo}>
@@ -154,11 +279,6 @@ export default function ServerFilesScreen() {
               </View>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No files found</Text>
-            </View>
-          }
           contentContainerStyle={styles.listContent}
         />
       )}
@@ -200,7 +320,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     fontFamily: 'monospace',
   },
-  searchContainer: {
+  actionContainer: {
     flexDirection: 'row' as const,
     gap: 8,
   },
@@ -215,7 +335,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  refreshIconButton: {
+  iconButton: {
     width: 44,
     height: 44,
     borderRadius: 8,
@@ -229,10 +349,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    padding: 20,
   },
   errorText: {
     color: Colors.dark.danger,
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   listContent: {
     padding: 16,
@@ -250,6 +383,19 @@ const styles = StyleSheet.create({
   fileIcon: {
     marginRight: 12,
   },
+  fileIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: Colors.dark.bgTertiary,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  editIcon: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+  },
   fileInfo: {
     flex: 1,
   },
@@ -264,8 +410,10 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
   },
   emptyContainer: {
+    flex: 1,
     padding: 40,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   emptyText: {
     color: Colors.dark.textMuted,
