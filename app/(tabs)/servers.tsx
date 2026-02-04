@@ -159,16 +159,16 @@ export default function ServersScreen() {
 
       <View style={styles.serverDetails}>
         <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>RAM</Text>
-          <Text style={styles.detailValue}>{item.memory} MB</Text>
+          <Text style={styles.detailLabel}>CPU Limit</Text>
+          <Text style={styles.detailValue}>{item.cpu}%</Text>
+        </View>
+        <View style={styles.detailItem}>
+          <Text style={styles.detailLabel}>Memory</Text>
+          <Text style={styles.detailValue}>{Math.round(item.memory / 1024)} GB</Text>
         </View>
         <View style={styles.detailItem}>
           <Text style={styles.detailLabel}>Disk</Text>
-          <Text style={styles.detailValue}>{item.disk} MB</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>CPU</Text>
-          <Text style={styles.detailValue}>{item.cpu}%</Text>
+          <Text style={styles.detailValue}>{Math.round(item.disk / 1024)} GB</Text>
         </View>
       </View>
 

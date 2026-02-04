@@ -157,6 +157,7 @@ export default function ServerOverviewScreen() {
         return Colors.dark.textMuted;
       case 'starting':
       case 'stopping':
+      case 'installing':
         return Colors.dark.warning;
       default:
         return Colors.dark.danger;

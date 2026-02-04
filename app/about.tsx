@@ -60,7 +60,7 @@ export default function AboutScreen() {
             style={styles.logo}
             contentFit="contain"
           />
-          <Text style={styles.appName}>FeatherPanel Mobile</Text>
+          <Text style={styles.appName}>FeatherPanel</Text>
           <Text style={styles.version}>Version 1.0.0</Text>
         </View>
 
@@ -114,7 +114,7 @@ export default function AboutScreen() {
               <Text style={styles.creditTitle}>Mobile App</Text>
             </View>
             <Text style={styles.creditText}>
-              Built by CodeForgeX Studio in collaboration with FeatherPanel. 
+              Built by CodeForgeX Studio in collaboration with MythicalSystems Studios. 
               We are authorized to develop, publish, and distribute this mobile 
               application under our own name.
             </Text>
@@ -134,7 +134,7 @@ export default function AboutScreen() {
             © {new Date().getFullYear()} CodeForgeX Studio
           </Text>
           <Text style={styles.footerSubtext}>
-            In collaboration with FeatherPanel
+            In collaboration with MythicalSystems Studios
           </Text>
         </View>
       </ScrollView>
