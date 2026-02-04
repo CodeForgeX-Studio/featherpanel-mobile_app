@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { createApiClient } from '@/lib/api';
-import { Folder, FileText, RefreshCw, Eye, Plus, FolderPlus, ChevronLeft, Save } from 'lucide-react-native';
+import { Folder, FileText, RefreshCw, Eye, Plus, FolderPlus, ChevronLeft, MoreVertical } from 'lucide-react-native';
 
 interface FileItem {
   name: string;
@@ -23,6 +23,7 @@ export default function ServerFilesScreen() {
   const queryClient = useQueryClient();
   const [currentPath, setCurrentPath] = useState('/');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
 
   const {
     data: apiResponse,
@@ -50,6 +51,7 @@ export default function ServerFilesScreen() {
     },
     enabled: !!instanceUrl && !!authToken && !!id,
     retry: false,
+    refetchInterval: 1000,
     staleTime: 0,
   });
 
@@ -140,41 +142,77 @@ export default function ServerFilesScreen() {
     );
   };
 
-  const handleFilePress = (file: FileItem) => {
+  const handleMenuPress = (file: FileItem) => {
+    setSelectedFile(file);
     if (file.type === 'directory') {
       Alert.alert(
-        file.name,
-        'Folder actions',
+        'Folder Options',
+        'Choose an action for this folder:',
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open', onPress: () => setCurrentPath(file.path) },
-          { text: 'Delete', onPress: () => confirmDelete(file), style: 'destructive' },
-          { text: 'Rename/Move → Web', onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions') }
-        ]
+          {
+            text: 'Open',
+            onPress: () => setCurrentPath(file.path)
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Delete Folder',
+                `Are you sure you want to delete ${file.name}?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: () => deleteMutation.mutate(file)
+                  },
+                ]
+              );
+            }
+          },
+          {
+            text: 'Rename/Move → Web',
+            onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions')
+          }
+        ],
+        { cancelable: true }
       );
     } else {
       Alert.alert(
-        file.name,
-        'File actions',
+        'File Options',
+        'Choose an action for this file:',
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Edit', onPress: () => readFileMutation.mutate(file) },
-          { text: 'Delete', onPress: () => confirmDelete(file), style: 'destructive' },
-          { text: 'Rename/Copy → Web', onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions') }
-        ]
+          {
+            text: 'Edit',
+            onPress: () => readFileMutation.mutate(file)
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Delete File',
+                `Are you sure you want to delete ${file.name}?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: () => deleteMutation.mutate(file)
+                  },
+                ]
+              );
+            }
+          },
+          {
+            text: 'Rename/Copy → Web',
+            onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions')
+          }
+        ],
+        { cancelable: true }
       );
     }
-  };
-
-  const confirmDelete = (file: FileItem) => {
-    Alert.alert(
-      'Delete File/Folder',
-      `Are you sure you want to delete ${file.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', onPress: () => deleteMutation.mutate(file), style: 'destructive' },
-      ]
-    );
   };
 
   const goBack = useCallback(() => {
@@ -194,6 +232,8 @@ export default function ServerFilesScreen() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const showEmptyState = filteredFiles.length === 0 && !isLoading && !error;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -250,7 +290,7 @@ export default function ServerFilesScreen() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : files.length === 0 ? (
+      ) : showEmptyState ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No files found</Text>
         </View>
@@ -259,27 +299,48 @@ export default function ServerFilesScreen() {
           data={filteredFiles}
           keyExtractor={(item, index) => `${item.path}-${index}`}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.fileItem}
-              onPress={() => handleFilePress(item)}
-            >
-              <View style={styles.fileIcon}>
-                {item.type === 'directory' ? (
-                  <Folder size={24} color={Colors.dark.primary} />
-                ) : (
-                  <View style={styles.fileIconContainer}>
-                    <FileText size={20} color={Colors.dark.textSecondary} />
-                    <Eye size={16} color={Colors.dark.primary} style={styles.editIcon} />
-                  </View>
-                )}
-              </View>
-              <View style={styles.fileInfo}>
-                <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.fileSize}>{formatFileSize(item.size)}</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.fileRow}>
+              <TouchableOpacity
+                style={styles.fileMain}
+                onPress={() => {
+                  if (item.type === 'directory') {
+                    setCurrentPath(item.path);
+                  } else {
+                    readFileMutation.mutate(item);
+                  }
+                }}
+              >
+                <View style={styles.fileIcon}>
+                  {item.type === 'directory' ? (
+                    <Folder size={24} color={Colors.dark.primary} />
+                  ) : (
+                    <View style={styles.fileIconContainer}>
+                      <FileText size={20} color={Colors.dark.textSecondary} />
+                      <Eye size={16} color={Colors.dark.primary} style={styles.editIcon} />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.fileSize}>{formatFileSize(item.size)}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.menuButton}
+                onPress={() => handleMenuPress(item)}
+              >
+                <MoreVertical size={20} color={Colors.dark.textSecondary} />
+              </TouchableOpacity>
+            </View>
           )}
           contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            searchQuery ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No files match your search</Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </SafeAreaView>
@@ -370,7 +431,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
   },
-  fileItem: {
+  fileRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: Colors.dark.bgSecondary,
@@ -379,6 +440,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  fileMain: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   fileIcon: {
     marginRight: 12,
@@ -408,6 +474,11 @@ const styles = StyleSheet.create({
   fileSize: {
     fontSize: 13,
     color: Colors.dark.textMuted,
+  },
+  menuButton: {
+    padding: 8,
+    borderRadius: 4,
+    marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,

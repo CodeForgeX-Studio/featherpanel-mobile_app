@@ -118,13 +118,13 @@ export default function ServersScreen() {
         return Colors.dark.success;
       case 'offline':
       case 'stopped':
-        return Colors.dark.danger;
+        return Colors.dark.textMuted;
       case 'starting':
       case 'stopping':
       case 'installing':
         return Colors.dark.warning;
       default:
-        return Colors.dark.textMuted;
+        return Colors.dark.danger;
     }
   };
 
