@@ -27,7 +27,7 @@ export default function ProfileScreen() {
       fetchSession().catch(() => undefined);
       const interval = setInterval(() => {
         fetchSession().catch(() => undefined);
-      }, 11000);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [authToken, fetchSession]);

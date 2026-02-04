@@ -22,7 +22,7 @@ function RootLayoutNav() {
       <Stack.Screen name="instance-setup" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="server" options={{ headerShown: false }} />
+      <Stack.Screen name="server/[id]" options={{ headerTitle: "Server Management" }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
       <Stack.Screen name="about" options={{ headerShown: false }} />
     </Stack>

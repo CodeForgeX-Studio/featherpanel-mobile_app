@@ -15,7 +15,7 @@ export default function ServerDetailLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Console",
+          title: "Overview",
         }}
       />
       <Stack.Screen

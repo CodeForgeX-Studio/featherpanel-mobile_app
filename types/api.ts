@@ -36,56 +36,137 @@ export interface User {
   permissions?: string[];
 }
 
-export interface Server {
+export interface ServerNode {
   id: number;
   uuid: string;
-  uuidShort: string;
+  public: number;
   name: string;
-  description?: string | null;
+  description: string;
+  location_id: number;
+  fqdn: string;
+  scheme: string;
+  behind_proxy: number;
+  maintenance_mode: number;
+  daemonListen: number;
+  daemonSFTP: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServerLocation {
+  id: number;
+  name: string;
+  description: string | null;
+  flag_code: string;
+}
+
+export interface ServerRealm {
+  id: number;
+  name: string;
+  description: string;
+  logo: string | null;
+}
+
+export interface ServerSpell {
+  id: number;
+  name: string;
+  description: string;
+  banner: string;
+  startup: string;
+  docker_images: Record<string, string>;
+  features: string[];
+  file_denylist: string[];
+  update_url: string | null;
+  config_files: Record<string, any>;
+  config_startup: Record<string, string>;
+  config_logs: any[];
+}
+
+export interface ServerAllocation {
+  id: number;
+  node_id: number;
+  ip: string;
+  ip_alias: string;
+  port: number;
+  server_id: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServerSftp {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  url: string;
+}
+
+export interface ServerVariable {
+  id: number;
+  server_id: number;
+  variable_id: number;
+  variable_value: string;
+  name: string;
+  description: string;
+  env_variable: string;
+  default_value: string;
+  user_viewable: number;
+  user_editable: number;
+  rules: string;
+  field_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServerSubdomain {
+  domain: string | null;
+  subdomain: string | null;
+}
+
+export interface Server {
+  id: number;
+  external_id: string | null;
+  uuid: string;
+  uuidShort: string;
+  node_id: number;
+  name: string;
+  description: string | null;
   status: string;
-  suspended?: number;
+  suspended: number;
+  skip_scripts: number;
+  skip_zerotrust: number;
+  owner_id: number;
   memory: number;
-  swap?: number;
+  swap: number;
   disk: number;
-  io?: number;
+  io: number;
   cpu: number;
-  threads?: string | null;
-  node?: {
-    name?: string;
-    maintenance_mode?: number;
-    fqdn?: string;
-    behind_proxy?: number;
-  };
-  location?: {
-    id: number;
-    name: string;
-    description?: string | null;
-    flag_code: string;
-  };
-  realm?: {
-    name?: string;
-    description?: string;
-    logo?: string | null;
-  };
-  spell?: {
-    name?: string;
-    description?: string;
-    banner?: string;
-  };
-  allocation?: {
-    ip?: string;
-    port?: number;
-    ip_alias?: string;
-  };
-  owner_id?: number;
-  skip_zerotrust?: number;
-  oom_disabled?: number;
-  allocation_limit?: number;
-  database_limit?: number;
-  backup_limit?: number;
-  is_subuser?: boolean;
-  subuser_permissions?: string[];
-  subuser_id?: number | null;
+  threads: string | null;
+  oom_disabled: number;
+  allocation_id: number;
+  realms_id: number;
+  spell_id: number;
+  startup: string;
+  image: string;
+  allocation_limit: number;
+  database_limit: number;
+  backup_limit: number;
+  created_at: string;
+  updated_at: string;
+  installed_at: string;
+  last_error: string | null;
+  is_subuser: boolean;
+  subuser_permissions: string[];
+  subuser_id: number | null;
+  node: ServerNode;
+  location: ServerLocation;
+  realm: ServerRealm;
+  spell: ServerSpell;
+  allocation: ServerAllocation;
+  sftp: ServerSftp;
+  variables: ServerVariable[];
+  subdomain: ServerSubdomain;
 }
 
 export interface ApiErrorItem {

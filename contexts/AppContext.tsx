@@ -45,12 +45,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
         AsyncStorage.getItem(STORAGE_KEYS.USER),
       ]);
 
-      console.log('[AppContext] Loaded from storage', {
-        instanceUrl,
-        authToken,
-        hasUser: !!userStr,
-      });
-
       return {
         instanceUrl,
         authToken,
@@ -61,11 +55,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   useEffect(() => {
     if (storageQuery.data) {
-      console.log('[AppContext] Applying storage state', {
-        instanceUrl: storageQuery.data.instanceUrl,
-        authToken: storageQuery.data.authToken,
-        hasUser: !!storageQuery.data.user,
-      });
       setState({
         instanceUrl: storageQuery.data.instanceUrl,
         authToken: storageQuery.data.authToken,
@@ -84,19 +73,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
     cleanUrl = cleanUrl.replace(/\/+$/, '');
 
-    console.log('[AppContext] setInstanceUrl', { input: url, cleanUrl });
-
     await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, cleanUrl);
     setState((prev) => ({ ...prev, instanceUrl: cleanUrl }));
   }, []);
 
   const setAuth = useCallback(async (cookieHeader: string, user: User) => {
-    console.log('[AppContext] setAuth called', {
-      cookieHeader,
-      userId: user.id,
-      username: user.username,
-    });
-
     await Promise.all([
       AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, cookieHeader),
       AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user)),
@@ -105,7 +86,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, []);
 
   const clearAuth = useCallback(async () => {
-    console.log('[AppContext] clearAuth called');
     await Promise.all([
       AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
       AsyncStorage.removeItem(STORAGE_KEYS.USER),
@@ -114,7 +94,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, []);
 
   const clearAll = useCallback(async () => {
-    console.log('[AppContext] clearAll called');
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.INSTANCE_URL,
       STORAGE_KEYS.AUTH_TOKEN,
@@ -132,12 +111,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (state.instanceUrl) {
       const cleanUrl = state.instanceUrl.replace(/\/$/, '');
 
-      console.log('[AppContext] Creating apiClient', {
-        instanceUrl: state.instanceUrl,
-        cleanUrl,
-        authToken: state.authToken,
-      });
-
       const client = axios.create({
         baseURL: cleanUrl,
         headers: {
@@ -152,13 +125,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
           if (state.authToken) {
             config.headers['Cookie'] = state.authToken;
           }
-
-          console.log('[AppContext apiClient] Outgoing request', {
-            url: config.url,
-            method: config.method,
-            headers: config.headers,
-          });
-
           return config;
         },
         (error) => Promise.reject(error)
@@ -166,18 +132,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
       client.interceptors.response.use(
         (response) => {
-          console.log('[AppContext apiClient] Response', {
-            url: response.config.url,
-            status: response.status,
-          });
           return response;
         },
         async (error: AxiosError) => {
-          console.log('[AppContext apiClient] Response error', {
-            url: error.config?.url,
-            status: error.response?.status,
-            data: error.response?.data,
-          });
           if (error.response?.status === 401 && state.authToken) {
             await clearAuth().catch(() => undefined);
           }
@@ -187,57 +144,28 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
       setApiClient(client);
     } else {
-      console.log('[AppContext] No instanceUrl, clearing apiClient');
       setApiClient(null);
     }
   }, [state.instanceUrl, state.authToken, clearAuth]);
 
   const fetchSession = useCallback(async (): Promise<SessionResponse | null> => {
     if (!state.instanceUrl || !state.authToken) {
-      console.log('[AppContext] fetchSession skipped, missing instanceUrl or authToken', {
-        instanceUrl: state.instanceUrl,
-        authToken: state.authToken,
-      });
       return null;
     }
 
     try {
-      console.log('[AppContext] fetchSession', {
-        instanceUrl: state.instanceUrl,
-        authToken: state.authToken,
-      });
-
       const client = createApiClient(state.instanceUrl, state.authToken);
       const res = await client.get<SessionResponse>('/api/user/session');
       const data = res.data;
 
-      console.log('[AppContext] fetchSession response', {
-        status: res.status,
-        success: data.success,
-        error: data.error,
-        error_code: data.error_code,
-        hasData: !!data.data,
-      });
-
       if (data.success && !data.error && data.data && data.data.user_info) {
         const userInfo = data.data.user_info as User;
-        console.log('[AppContext] fetchSession user_info', {
-          id: userInfo.id,
-          username: userInfo.username,
-        });
         setState((prev) => ({ ...prev, user: userInfo }));
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userInfo));
       }
 
       return data;
     } catch (error: any) {
-      console.log('[AppContext] fetchSession error raw', {
-        message: error?.message,
-        name: error?.name,
-        code: error?.code,
-        status: error?.response?.status,
-        data: error?.response?.data,
-      });
       const msg = handleApiError(error);
       if (error.response?.status === 401) {
         await clearAuth();
@@ -250,17 +178,13 @@ export const [AppProvider, useApp] = createContextHook(() => {
     let interval: NodeJS.Timeout | undefined;
 
     if (state.instanceUrl && state.authToken) {
-      console.log('[AppContext] Starting session interval');
       interval = setInterval(() => {
-        fetchSession().catch((e) =>
-          console.log('[AppContext] fetchSession interval error', e?.message)
-        );
-      }, 10000);
+        fetchSession().catch((e) => {});
+      }, 4000);
     }
 
     return () => {
       if (interval) {
-        console.log('[AppContext] Clearing session interval');
         clearInterval(interval);
       }
     };
@@ -273,11 +197,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
 
       const cleanUrl = state.instanceUrl.replace(/\/$/, '');
-      console.log('[AppContext] loginMutation start', {
-        instanceUrl: state.instanceUrl,
-        cleanUrl,
-        username_or_email: credentials.username_or_email,
-      });
 
       const client = axios.create({
         baseURL: cleanUrl,
@@ -296,61 +215,27 @@ export const [AppProvider, useApp] = createContextHook(() => {
           turnstile_token: credentials.turnstile_token || '',
         });
 
-        console.log('[AppContext] loginMutation response', {
-          status: response.status,
-          headers: response.headers,
-          success: response.data.success,
-          error: response.data.error,
-          error_code: response.data.error_code,
-          hasUser: !!response.data.data?.user,
-        });
-
         const setCookie = response.headers['set-cookie'];
-        console.log('[AppContext] loginMutation set-cookie raw', setCookie);
 
         if (setCookie && Array.isArray(setCookie) && setCookie.length > 0) {
           const raw = setCookie[0];
           const cookieHeader = raw.split(';')[0] + ';';
 
-          console.log('[AppContext] loginMutation parsed cookie', {
-            raw,
-            cookieHeader,
-          });
-
           if (response.data.success && !response.data.error && response.data.data && response.data.data.user) {
             const user = response.data.data.user as User;
             await setAuth(cookieHeader, user);
           }
-        } else {
-          console.log('[AppContext] loginMutation no set-cookie header found');
         }
 
         return response.data;
       } catch (error: any) {
-        console.log('[AppContext] loginMutation error raw', {
-          message: error?.message,
-          name: error?.name,
-          code: error?.code,
-          status: error?.response?.status,
-          data: error?.response?.data,
-        });
-
         const msg = handleApiError(error);
         throw new Error(msg);
       }
     },
     onSuccess: async (data) => {
-      console.log('[AppContext] loginMutation onSuccess', {
-        success: data.success,
-        error: data.error,
-        error_code: data.error_code,
-        hasData: !!data.data,
-      });
-
       if (data.success && !data.error && data.data && data.data.user) {
-        await fetchSession().catch((e) =>
-          console.log('[AppContext] fetchSession after login error', e?.message)
-        );
+        await fetchSession().catch((e) => {});
       }
     },
   });
@@ -362,11 +247,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
 
       const cleanUrl = state.instanceUrl.replace(/\/$/, '');
-      console.log('[AppContext] registerMutation start', {
-        instanceUrl: state.instanceUrl,
-        cleanUrl,
-        username: data.username,
-      });
 
       const client = axios.create({
         baseURL: cleanUrl,
@@ -379,24 +259,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
       try {
         const response = await client.put<ApiEnvelope<unknown>>('/api/user/auth/register', data);
-
-        console.log('[AppContext] registerMutation response', {
-          status: response.status,
-          success: response.data.success,
-          error: response.data.error,
-          error_code: response.data.error_code,
-        });
-
         return response.data;
       } catch (error: any) {
-        console.log('[AppContext] registerMutation error raw', {
-          message: error?.message,
-          name: error?.name,
-          code: error?.code,
-          status: error?.response?.status,
-          data: error?.response?.data,
-        });
-
         const msg = handleApiError(error);
         throw new Error(msg);
       }
@@ -406,19 +270,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       if (!state.instanceUrl || !state.authToken) {
-        console.log('[AppContext] logoutMutation skipped, missing instanceUrl or authToken', {
-          instanceUrl: state.instanceUrl,
-          authToken: state.authToken,
-        });
         return;
       }
 
       const url = `${state.instanceUrl.replace(/\/$/, '')}/api/user/auth/logout`;
-      console.log('[AppContext] logoutMutation calling', {
-        url,
-        cookie: state.authToken,
-      });
-
       await axios.get(url, {
         headers: {
           Cookie: state.authToken,
@@ -426,19 +281,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       });
     },
     onSuccess: async () => {
-      console.log('[AppContext] logoutMutation onSuccess, clearing auth');
       await clearAuth();
     },
   });
 
   const canChangeInstanceUrl = !state.authToken;
-
-  console.log('[AppContext] Render state snapshot', {
-    instanceUrl: state.instanceUrl,
-    authToken: state.authToken,
-    hasUser: !!state.user,
-    isLoading: state.isLoading,
-  });
 
   return {
     ...state,

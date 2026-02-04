@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Server, UserCircle, Shield } from "lucide-react-native";
+import { Server, UserCircle, ShieldCheck } from "lucide-react-native";
 import React from "react";
 import Colors from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
@@ -38,7 +38,7 @@ export default function TabLayout() {
           name="admin"
           options={{
             title: "Admin",
-            tabBarIcon: ({ color }) => <Shield size={24} color={color} />,
+            tabBarIcon: ({ color }) => <ShieldCheck size={24} color={color} />,
           }}
         />
       )}

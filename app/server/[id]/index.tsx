@@ -1,18 +1,23 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Colors from '@/constants/colors';
-import { useApp } from '@/contexts/AppContext';
-import { 
-  Terminal, 
-  FolderOpen, 
-  Database, 
-  Archive, 
-  Network, 
-  Calendar, 
-  Users, 
+import {
+  Terminal,
+  FolderOpen,
+  Database,
+  Archive,
+  Network,
+  Calendar,
+  Users,
   Settings,
   Play,
   Square,
@@ -20,29 +25,13 @@ import {
   Power,
   Cpu,
   HardDrive,
-  MemoryStick
+  MemoryStick,
 } from 'lucide-react-native';
 
-interface ServerDetail {
-  id: number;
-  uuid: string;
-  uuidShort: string;
-  name: string;
-  description: string;
-  status: string;
-  memory: number;
-  disk: number;
-  cpu: number;
-  swap: number;
-  node: {
-    name: string;
-    fqdn: string;
-  };
-  allocation: {
-    ip: string;
-    port: number;
-  };
-}
+import Colors from '@/constants/colors';
+import { useApp } from '@/contexts/AppContext';
+import { createApiClient } from '@/lib/api';
+import type { ApiEnvelope, Server } from '@/types/api';
 
 interface NavigationItem {
   title: string;
@@ -54,35 +43,108 @@ interface NavigationItem {
 export default function ServerOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { apiClient } = useApp();
+  const { instanceUrl, authToken } = useApp();
 
-  const { data: server, isLoading, error } = useQuery<ServerDetail>({
-    queryKey: ['server', id, apiClient],
+  const apiClient =
+    instanceUrl && authToken ? createApiClient(instanceUrl, authToken) : null;
+
+  const {
+    data: serverEnvelope,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['server', id, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const response = await apiClient.get(`/api/user/servers/${id}`);
+      if (!apiClient || !id) throw new Error('API client not initialized');
+      const response = await apiClient.get<ApiEnvelope<Server>>(
+        `/api/user/servers/${id}`
+      );
+      if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.error_message || 'Failed to fetch server');
+      }
       return response.data;
     },
     enabled: !!apiClient && !!id,
   });
 
+  const server = serverEnvelope?.data || null;
+
   const powerMutation = useMutation({
     mutationFn: async (action: 'start' | 'stop' | 'restart' | 'kill') => {
-      if (!apiClient) throw new Error('API client not initialized');
+      if (!apiClient || !id) throw new Error('API client not initialized');
       await apiClient.post(`/api/user/servers/${id}/power/${action}`);
+    },
+    onSuccess: () => {
+      refetch();
     },
   });
 
   const navigationItems: NavigationItem[] = [
-    { title: 'Console', icon: Terminal, route: `/server/${id}/console`, description: 'Server console and logs' },
-    { title: 'Files', icon: FolderOpen, route: `/server/${id}/files`, description: 'File manager' },
-    { title: 'Databases', icon: Database, route: `/server/${id}/databases`, description: 'Database management' },
-    { title: 'Backups', icon: Archive, route: `/server/${id}/backups`, description: 'Backup management' },
-    { title: 'Network', icon: Network, route: `/server/${id}/allocations`, description: 'Ports and allocations' },
-    { title: 'Schedules', icon: Calendar, route: `/server/${id}/schedules`, description: 'Task automation' },
-    { title: 'Subusers', icon: Users, route: `/server/${id}/subusers`, description: 'Access management' },
-    { title: 'Settings', icon: Settings, route: `/server/${id}/settings`, description: 'Server settings' },
+    {
+      title: 'Console',
+      icon: Terminal,
+      route: `/server/${id}/console`,
+      description: 'Server console and full logs',
+    },
+    {
+      title: 'Files',
+      icon: FolderOpen,
+      route: `/server/${id}/files`,
+      description: 'File manager',
+    },
+    {
+      title: 'Databases',
+      icon: Database,
+      route: `/server/${id}/databases`,
+      description: 'Database management',
+    },
+    {
+      title: 'Backups',
+      icon: Archive,
+      route: `/server/${id}/backups`,
+      description: 'Backup management',
+    },
+    {
+      title: 'Network',
+      icon: Network,
+      route: `/server/${id}/allocations`,
+      description: 'Ports and allocations',
+    },
+    {
+      title: 'Schedules',
+      icon: Calendar,
+      route: `/server/${id}/schedules`,
+      description: 'Task automation',
+    },
+    {
+      title: 'Subusers',
+      icon: Users,
+      route: `/server/${id}/subusers`,
+      description: 'Access management',
+    },
+    {
+      title: 'Settings',
+      icon: Settings,
+      route: `/server/${id}/settings`,
+      description: 'Server settings',
+    },
   ];
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'running':
+        return Colors.dark.success;
+      case 'offline':
+      case 'stopped':
+        return Colors.dark.textMuted;
+      case 'starting':
+      case 'stopping':
+        return Colors.dark.warning;
+      default:
+        return Colors.dark.danger;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -95,19 +157,12 @@ export default function ServerOverviewScreen() {
   if (error || !server) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Failed to load server</Text>
+        <Text style={styles.errorText}>
+          Failed to load server: {(error as any)?.message || 'Unknown error'}
+        </Text>
       </View>
     );
   }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running': return Colors.dark.success;
-      case 'offline': case 'stopped': return Colors.dark.textMuted;
-      case 'starting': case 'stopping': return Colors.dark.warning;
-      default: return Colors.dark.danger;
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -115,14 +170,23 @@ export default function ServerOverviewScreen() {
         <View style={styles.serverHeader}>
           <View style={styles.serverTitleRow}>
             <Text style={styles.serverName}>{server.name}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(server.status) + '20' }]}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(server.status) }]} />
-              <Text style={[styles.statusText, { color: getStatusColor(server.status) }]}>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getStatusColor(server.status) + '20' },
+              ]}
+            >
+              <View
+                style={[styles.statusDot, { backgroundColor: getStatusColor(server.status) }]}
+              />
+              <Text
+                style={[styles.statusText, { color: getStatusColor(server.status) }]}
+              >
                 {server.status}
               </Text>
             </View>
           </View>
-          
+
           {server.description && (
             <Text style={styles.serverDescription}>{server.description}</Text>
           )}
@@ -130,11 +194,11 @@ export default function ServerOverviewScreen() {
           <View style={styles.serverInfo}>
             <Text style={styles.serverInfoText}>
               <Text style={styles.serverInfoLabel}>Node: </Text>
-              {server.node.name}
+              {server.node?.name}
             </Text>
             <Text style={styles.serverInfoText}>
               <Text style={styles.serverInfoLabel}>Address: </Text>
-              {server.allocation.ip}:{server.allocation.port}
+              {server.allocation?.ip}:{server.allocation?.port}
             </Text>
           </View>
         </View>
@@ -190,12 +254,16 @@ export default function ServerOverviewScreen() {
             </View>
             <View style={styles.resourceCard}>
               <MemoryStick size={24} color={Colors.dark.primary} />
-              <Text style={styles.resourceValue}>{Math.round(server.memory / 1024)} GB</Text>
+              <Text style={styles.resourceValue}>
+                {Math.round(server.memory / 1024)} GB
+              </Text>
               <Text style={styles.resourceLabel}>Memory</Text>
             </View>
             <View style={styles.resourceCard}>
               <HardDrive size={24} color={Colors.dark.primary} />
-              <Text style={styles.resourceValue}>{Math.round(server.disk / 1024)} GB</Text>
+              <Text style={styles.resourceValue}>
+                {Math.round(server.disk / 1024)} GB
+              </Text>
               <Text style={styles.resourceLabel}>Disk</Text>
             </View>
           </View>
@@ -240,6 +308,8 @@ const styles = StyleSheet.create({
   errorText: {
     color: Colors.dark.danger,
     fontSize: 16,
+    textAlign: 'center' as const,
+    paddingHorizontal: 16,
   },
   scrollView: {
     flex: 1,
