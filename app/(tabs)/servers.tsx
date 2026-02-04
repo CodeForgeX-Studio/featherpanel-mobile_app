@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,9 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/contexts/AppContext';
 import { createApiClient, handleApiError } from '@/lib/api';
 import type { Server, ServersEnvelope } from '@/types/api';
@@ -20,30 +19,32 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function ServersScreen() {
   const { instanceUrl, authToken, clearAuth } = useApp();
   const router = useRouter();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const queryClient = useQueryClient();
+
+  const version = useMemo(() => Date.now().toString(), []);
 
   const {
-    data: servers,
-    isLoading,
+    data: servers = [],
     error,
     refetch,
   } = useQuery<Server[], Error>({
-    queryKey: ['servers', instanceUrl, authToken],
+    queryKey: ['servers', instanceUrl, authToken, version],
     queryFn: async () => {
       if (!instanceUrl || !authToken) {
+        queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);
         throw new Error('Not authenticated');
       }
 
       try {
         const api = createApiClient(instanceUrl, authToken);
+        const response = await api.get<ServersEnvelope>('/api/user/servers?view_all=true');
 
-        const response = await api.get<ServersEnvelope>(
-          '/api/user/servers?view_all=true&page=1&per_page=10'
-        );
-
-        if (!response.data.success || response.data.error) {
-          const code = response.data.error_code;
-          const message =
-            response.data.error_message || response.data.message || 'Failed to fetch servers';
+        if (response.status !== 200) {
+          queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);
+          
+          const code = response.data?.error_code;
+          const message = response.data?.error_message || response.data?.message || 'Failed to fetch servers';
 
           if (code === 'INVALID_ACCOUNT_TOKEN') {
             await clearAuth().catch(() => undefined);
@@ -53,28 +54,59 @@ export default function ServersScreen() {
           throw new Error(message);
         }
 
-        if (!response.data.data) {
+        if (!response.data.success || response.data.error) {
+          queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);
+          
+          const code = response.data.error_code;
+          const message = response.data.error_message || response.data.message || 'Failed to fetch servers';
+
+          if (code === 'INVALID_ACCOUNT_TOKEN') {
+            await clearAuth().catch(() => undefined);
+            router.replace('/');
+          }
+
+          throw new Error(message);
+        }
+
+        const serverData = response.data.data?.servers || [];
+        
+        if (serverData.length === 0) {
+          queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);
           return [];
         }
 
-        return response.data.data.servers;
-      } catch (err: any) {
-        const msg = handleApiError(err);
-        throw new Error(msg);
+        return serverData;
+      } catch (error) {
+        queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);
+        throw error;
       }
     },
     enabled: !!instanceUrl && !!authToken,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (refetch) {
-        await refetch();
-      }
-    }, 1000);
+    if (instanceUrl && authToken) {
+      refetch();
+    }
+  }, [instanceUrl, authToken, refetch]);
 
-    return () => clearInterval(interval);
-  }, [refetch]);
+  useEffect(() => {
+    if (instanceUrl && authToken) {
+      intervalRef.current = setInterval(async () => {
+        await refetch();
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [instanceUrl, authToken, refetch]);
 
   const handleManualRefresh = useCallback(() => {
     refetch();
@@ -150,35 +182,10 @@ export default function ServersScreen() {
     </TouchableOpacity>
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <AlertCircle size={48} color={Colors.dark.danger} />
-        <Text style={styles.errorText}>{error.message || 'Failed to load servers'}</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => {
-            refetch();
-          }}
-        >
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <FlatList
-        data={servers || []}
+        data={servers}
         renderItem={renderServer}
         keyExtractor={(item) => item.uuid}
         contentContainerStyle={styles.listContent}
@@ -187,7 +194,7 @@ export default function ServersScreen() {
             <ServerIcon size={64} color={Colors.dark.textMuted} />
             <Text style={styles.emptyText}>No servers found</Text>
             <Text style={styles.emptySubtext}>
-              Servers you own or have access to will appear here
+              {'No access to servers or check your permissions'}
             </Text>
           </View>
         }
@@ -309,22 +316,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center' as const,
     paddingHorizontal: 32,
-  },
-  errorText: {
-    fontSize: 18,
-    color: Colors.dark.danger,
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: Colors.dark.text,
-    fontSize: 16,
-    fontWeight: '600' as const,
   },
 });

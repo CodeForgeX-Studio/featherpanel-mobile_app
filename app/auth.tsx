@@ -189,7 +189,7 @@ export default function AuthScreen() {
           return;
         }
 
-        router.replace('/(tabs)/servers');
+        router.replace('/auth');
       }
     } catch (err: any) {
       const apiEnvelope = (err?.response?.data || err?.data || null) as Partial<ApiEnvelope<unknown>> | null;
