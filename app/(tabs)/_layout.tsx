@@ -2,12 +2,8 @@ import { Tabs } from "expo-router";
 import { Server, UserCircle, ShieldCheck } from "lucide-react-native";
 import React from "react";
 import Colors from "@/constants/colors";
-import { useApp } from "@/contexts/AppContext";
 
 export default function TabLayout() {
-  const { user } = useApp();
-  
-  const isAdmin = user?.role?.name === 'Admin' || user?.role?.name === 'Moderator';
 
   return (
     <Tabs
@@ -33,15 +29,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Server size={24} color={color} />,
         }}
       />
-      {isAdmin && (
-        <Tabs.Screen
-          name="admin"
-          options={{
-            title: "Admin",
-            tabBarIcon: ({ color }) => <ShieldCheck size={24} color={color} />,
-          }}
-        />
-      )}
       <Tabs.Screen
         name="profile"
         options={{
