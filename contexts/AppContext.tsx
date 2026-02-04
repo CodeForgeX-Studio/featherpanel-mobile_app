@@ -215,10 +215,27 @@ export const [AppProvider, useApp] = createContextHook(() => {
           turnstile_token: credentials.turnstile_token || '',
         });
 
+        const setCookie = response.headers['set-cookie'];
+
+        if (setCookie && Array.isArray(setCookie) && setCookie.length > 0) {
+          const raw = setCookie[0];
+          const cookieHeader = raw.split(';')[0] + ';';
+
+          if (response.data.success && !response.data.error && response.data.data && response.data.data.user) {
+            const user = response.data.data.user as User;
+            await setAuth(cookieHeader, user);
+          }
+        }
+
         return response.data;
       } catch (error: any) {
         const msg = handleApiError(error);
         throw new Error(msg);
+      }
+    },
+    onSuccess: async (data) => {
+      if (data.success && !data.error && data.data && data.data.user) {
+        await fetchSession().catch((e) => {});
       }
     },
   });
@@ -246,51 +263,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       } catch (error: any) {
         const msg = handleApiError(error);
         throw new Error(msg);
-      }
-    },
-  });
-
-  const twoFactorMutation = useMutation({
-    mutationFn: async (data: { email: string; code: string }): Promise<LoginResponse> => {
-      if (!state.instanceUrl) {
-        throw new Error('Instance URL not set');
-      }
-
-      const cleanUrl = state.instanceUrl.replace(/\/$/, '');
-
-      const client = axios.create({
-        baseURL: cleanUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        timeout: 30000,
-        withCredentials: true,
-      });
-
-      try {
-        const response = await client.post<LoginResponse>('/api/user/auth/two-factor', data);
-        
-        const setCookie = response.headers['set-cookie'];
-        if (setCookie && Array.isArray(setCookie) && setCookie.length > 0) {
-          const raw = setCookie[0];
-          const cookieHeader = raw.split(';')[0] + ';';
-
-          if (response.data.success && !response.data.error && response.data.data && response.data.data.user) {
-            const user = response.data.data.user as User;
-            await setAuth(cookieHeader, user);
-          }
-        }
-
-        return response.data;
-      } catch (error: any) {
-        const msg = handleApiError(error);
-        throw new Error(msg);
-      }
-    },
-    onSuccess: async (data) => {
-      if (data.success && !data.error && data.data && data.data.user) {
-        await fetchSession().catch((e) => {});
       }
     },
   });
@@ -325,15 +297,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     clearAll,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
-    twoFactor: twoFactorMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     isLoginLoading: loginMutation.isPending,
     isRegisterLoading: registerMutation.isPending,
-    isTwoFactorLoading: twoFactorMutation.isPending,
     isLogoutLoading: logoutMutation.isPending,
     loginError: loginMutation.error,
     registerError: registerMutation.error,
-    twoFactorError: twoFactorMutation.error,
     fetchSession,
   };
 });
