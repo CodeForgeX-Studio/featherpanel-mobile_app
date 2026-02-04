@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,21 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { WebView } from 'react-native-webview';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
 import { User as UserIcon, Lock, Mail, ArrowRight, Globe, Edit2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { handleApiError, extractApiMessage } from '@/lib/api';
+import { handleApiError, extractApiMessage, createApiClient } from '@/lib/api';
 import { LoginResponse, ApiEnvelope } from '@/types/api';
+
+interface SystemSettings {
+  turnstile_enabled: string;
+  turnstile_key_pub: string;
+  app_name: string;
+}
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -27,35 +35,134 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
+  const webViewRef = useRef<WebView>(null);
 
-  const { login, register, isLoginLoading, isRegisterLoading, instanceUrl, canChangeInstanceUrl } = useApp();
+  const { login, register, isLoginLoading, isRegisterLoading, instanceUrl } = useApp();
   const router = useRouter();
+
+  const {
+    data: settings,
+    isLoading: isSettingsLoading,
+  } = useQuery<SystemSettings>({
+    queryKey: ['systemSettings', instanceUrl],
+    queryFn: async () => {
+      if (!instanceUrl) throw new Error('No instance URL');
+      const api = createApiClient(instanceUrl, '');
+      const response = await api.get<any>('/api/system/settings');
+      if (!response.data.success) {
+        throw new Error('Failed to load settings');
+      }
+      return response.data.data.settings;
+    },
+    enabled: !!instanceUrl,
+    refetchInterval: 2000,
+  });
+
+  const turnstileEnabled = settings?.turnstile_enabled === 'true';
+  const turnstileKey = settings?.turnstile_key_pub;
+  const instanceDomain = instanceUrl ? new URL(instanceUrl).hostname : '';
+
+  const turnstileHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+      <style>
+        * { 
+          box-sizing: border-box; 
+          margin: 0; 
+          padding: 0; 
+        }
+        html, body { 
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: transparent;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        #turnstile-container {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .cf-turnstile {
+          transform: scale(1.15);
+          transform-origin: center center;
+        }
+      </style>
+    </head>
+    <body>
+      <div id="turnstile-container">
+        <div class="cf-turnstile" 
+             data-sitekey="${turnstileKey}" 
+             data-theme="dark" 
+             data-size="large"
+             data-callback="onTurnstileSuccess"
+             data-expired-callback="onTurnstileExpired"
+             data-error-callback="onTurnstileError">
+        </div>
+      </div>
+      
+      <script>
+        function onTurnstileSuccess(token) {
+          window.ReactNativeWebView.postMessage('turnstile:' + token);
+        }
+        
+        function onTurnstileExpired() {
+          window.ReactNativeWebView.postMessage('turnstile:expired');
+        }
+        
+        function onTurnstileError() {
+          window.ReactNativeWebView.postMessage('turnstile:error');
+        }
+        
+        window.addEventListener('message', function(event) {
+          if (event.data === 'reset') {
+            if (window.turnstile) {
+              window.turnstile.reset('.cf-turnstile');
+            }
+          }
+        });
+      </script>
+    </body>
+    </html>
+  `;
 
   const handleSubmit = async () => {
     setError('');
 
     try {
+      if (turnstileEnabled && !turnstileToken) {
+        setError('Please complete Cloudflare Turnstile verification');
+        return;
+      }
+
       if (isLogin) {
         if (!username || !password) {
           setError('Please fill in all fields');
           return;
         }
 
-        const res = (await login({
+        const res = await login({
           username_or_email: username,
           password,
-        })) as LoginResponse;
+          turnstile_token: turnstileEnabled ? turnstileToken : undefined,
+        }) as LoginResponse;
 
         if (!res.success || res.error) {
-          const message =
-            extractApiMessage<LoginResponse['data']>(res) ||
-            'Authentication failed';
+          const message = extractApiMessage(res) || 'Authentication failed';
           setError(message);
           return;
         }
 
-        if (!res.data || !res.data.user) {
+        if (!res.data?.user) {
           setError('Authentication failed: no user data returned');
           return;
         }
@@ -67,18 +174,17 @@ export default function AuthScreen() {
           return;
         }
 
-        const res = (await register({
+        const res = await register({
           username,
           email,
           password,
           first_name: firstName,
           last_name: lastName,
-        })) as ApiEnvelope<unknown>;
+          turnstile_token: turnstileEnabled ? turnstileToken : undefined,
+        }) as ApiEnvelope<unknown>;
 
         if (!res.success || res.error) {
-          const message =
-            extractApiMessage(res) ||
-            'Registration failed';
+          const message = extractApiMessage(res) || 'Registration failed';
           setError(message);
           return;
         }
@@ -86,15 +192,12 @@ export default function AuthScreen() {
         router.replace('/(tabs)/servers');
       }
     } catch (err: any) {
-
       const apiEnvelope = (err?.response?.data || err?.data || null) as Partial<ApiEnvelope<unknown>> | null;
-
       if (apiEnvelope) {
         const message = extractApiMessage(apiEnvelope) || 'Authentication failed';
         setError(message);
         return;
       }
-
       const msg = handleApiError(err);
       setError(msg);
     }
@@ -108,9 +211,13 @@ export default function AuthScreen() {
     setPassword('');
     setFirstName('');
     setLastName('');
+    setTurnstileToken('');
+    if (webViewRef.current) {
+      webViewRef.current.postMessage('reset');
+    }
   };
 
-  const isLoading = isLoginLoading || isRegisterLoading;
+  const isLoading = isLoginLoading || isRegisterLoading || isSettingsLoading;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -133,26 +240,21 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={styles.instanceUrlBadge}
               onPress={() => {
-                if (canChangeInstanceUrl) {
-                  Alert.alert(
-                    'Change Instance',
-                    'Do you want to change your FeatherPanel instance?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Change', onPress: () => router.replace('/instance-setup') },
-                    ]
-                  );
-                } else {
-                  Alert.alert('Instance Locked', 'You must logout first to change the instance URL');
-                }
+                Alert.alert(
+                  'Change Instance',
+                  'Do you want to change your FeatherPanel instance?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Change', onPress: () => router.replace('/instance-setup') },
+                  ]
+                );
               }}
-              testID="instance-url-badge"
             >
               <Globe size={16} color={Colors.dark.primary} />
               <Text style={styles.instanceUrlText} numberOfLines={1}>
                 {instanceUrl ? new URL(instanceUrl).hostname : 'No instance'}
               </Text>
-              {canChangeInstanceUrl && <Edit2 size={14} color={Colors.dark.textMuted} />}
+              <Edit2 size={14} color={Colors.dark.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -169,7 +271,6 @@ export default function AuthScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  testID="username-input"
                 />
               </View>
             </View>
@@ -189,7 +290,6 @@ export default function AuthScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       keyboardType="email-address"
-                      testID="email-input"
                     />
                   </View>
                 </View>
@@ -205,7 +305,6 @@ export default function AuthScreen() {
                         value={firstName}
                         onChangeText={setFirstName}
                         autoCapitalize="words"
-                        testID="first-name-input"
                       />
                     </View>
                   </View>
@@ -220,7 +319,6 @@ export default function AuthScreen() {
                         value={lastName}
                         onChangeText={setLastName}
                         autoCapitalize="words"
-                        testID="last-name-input"
                       />
                     </View>
                   </View>
@@ -243,10 +341,51 @@ export default function AuthScreen() {
                   autoCorrect={false}
                   returnKeyType="go"
                   onSubmitEditing={handleSubmit}
-                  testID="password-input"
                 />
               </View>
             </View>
+
+            {turnstileEnabled && turnstileKey && (
+              <View style={styles.inputContainer}>
+                <View style={styles.turnstileContainer}>
+                  <WebView
+                    ref={webViewRef}
+                    source={{ 
+                      html: turnstileHtml,
+                      baseUrl: instanceUrl 
+                    }}
+                    style={styles.turnstileWebView}
+                    onMessage={(event) => {
+                      const data = event.nativeEvent.data;
+                      if (data.startsWith('turnstile:')) {
+                        const token = data.replace('turnstile:', '');
+                        if (token === 'expired' || token === 'error') {
+                          setTurnstileToken('');
+                        } else {
+                          setTurnstileToken(token);
+                        }
+                      }
+                    }}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    allowsInlineMediaPlayback={true}
+                    mediaPlaybackRequiresUserAction={false}
+                    startInLoadingState={false}
+                    thirdPartyCookiesEnabled={true}
+                    sharedCookiesEnabled={true}
+                    originWhitelist={['*']}
+                    scalesPageToFit={false}
+                    scrollEnabled={false}
+                    bounces={false}
+                    showsVerticalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={false}
+                    incognito={false}
+                    cacheEnabled={true}
+                    userAgent={`Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1`}
+                  />
+                </View>
+              </View>
+            )}
 
             {error ? (
               <View style={styles.errorContainer}>
@@ -258,7 +397,6 @@ export default function AuthScreen() {
               style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={isLoading}
-              testID="submit-button"
             >
               {isLoading ? (
                 <ActivityIndicator color={Colors.dark.text} />
@@ -273,7 +411,6 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={styles.switchButton}
               onPress={handleToggleMode}
-              testID="switch-auth-mode"
               disabled={isLoading}
             >
               <Text style={styles.switchText}>
@@ -303,7 +440,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    alignItems: 'center' as const,
+    alignItems: 'center',
     marginBottom: 32,
   },
   logo: {
@@ -313,14 +450,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     color: Colors.dark.textSecondary,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   form: {
     flex: 1,
@@ -329,7 +466,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   row: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     gap: 12,
   },
   halfWidth: {
@@ -337,13 +474,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 8,
   },
   inputWrapper: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.dark.bgSecondary,
     borderRadius: 12,
     borderWidth: 1,
@@ -359,6 +496,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.dark.text,
   },
+  turnstileContainer: {
+    overflow: 'hidden',
+    height: 100,
+    backgroundColor: 'transparent',
+  },
+  turnstileWebView: {
+    backgroundColor: 'transparent',
+  },
   errorContainer: {
     backgroundColor: Colors.dark.danger + '20',
     borderRadius: 8,
@@ -373,9 +518,9 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: Colors.dark.primary,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -386,11 +531,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   switchButton: {
-    alignItems: 'center' as const,
+    alignItems: 'center',
     paddingVertical: 12,
   },
   switchText: {
@@ -399,11 +544,11 @@ const styles = StyleSheet.create({
   },
   switchTextBold: {
     color: Colors.dark.primary,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   instanceUrlBadge: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.dark.bgSecondary,
     borderRadius: 8,
     paddingHorizontal: 12,

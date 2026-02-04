@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { useApp } from '@/contexts/AppContext';
 import { createApiClient, handleApiError } from '@/lib/api';
 import type { Server, ServersEnvelope } from '@/types/api';
 import Colors from '@/constants/colors';
-import { Server as ServerIcon, AlertCircle, RefreshCw } from 'lucide-react-native';
+import { Server as ServerIcon, AlertCircle } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ServersScreen() {
@@ -26,7 +26,6 @@ export default function ServersScreen() {
     isLoading,
     error,
     refetch,
-    isRefetching,
   } = useQuery<Server[], Error>({
     queryKey: ['servers', instanceUrl, authToken],
     queryFn: async () => {
@@ -66,6 +65,16 @@ export default function ServersScreen() {
     },
     enabled: !!instanceUrl && !!authToken,
   });
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (refetch) {
+        await refetch();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   const handleManualRefresh = useCallback(() => {
     refetch();
@@ -168,21 +177,6 @@ export default function ServersScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Servers</Text>
-        <TouchableOpacity
-          style={[styles.refreshButton, isRefetching && styles.refreshButtonLoading]}
-          onPress={handleManualRefresh}
-          disabled={isRefetching}
-        >
-          {isRefetching ? (
-            <ActivityIndicator size="small" color={Colors.dark.text} />
-          ) : (
-            <RefreshCw size={20} color={Colors.dark.text} />
-          )}
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         data={servers || []}
         renderItem={renderServer}
@@ -199,8 +193,8 @@ export default function ServersScreen() {
         }
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
+            refreshing={false}
+            onRefresh={handleManualRefresh}
             tintColor={Colors.dark.primary}
           />
         }
@@ -213,31 +207,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.dark.bg,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600' as const,
-    color: Colors.dark.text,
-  },
-  refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.dark.bgSecondary,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  refreshButtonLoading: {
-    opacity: 0.7,
   },
   centerContainer: {
     flex: 1,

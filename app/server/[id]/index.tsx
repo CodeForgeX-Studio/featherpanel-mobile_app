@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -75,10 +75,27 @@ export default function ServerOverviewScreen() {
       if (!apiClient || !id) throw new Error('API client not initialized');
       await apiClient.post(`/api/user/servers/${id}/power/${action}`);
     },
-    onSuccess: () => {
-      refetch();
-    },
   });
+
+  const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
+    if (powerMutation.isPending || !refetch) return;
+    
+    powerMutation.mutate(action, {
+      onSettled: async () => {
+        await refetch();
+      }
+    });
+  };
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (refetch) {
+        await refetch();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   const navigationItems: NavigationItem[] = [
     {
@@ -208,7 +225,7 @@ export default function ServerOverviewScreen() {
           <View style={styles.powerControls}>
             <TouchableOpacity
               style={[styles.powerButton, styles.powerButtonStart]}
-              onPress={() => powerMutation.mutate('start')}
+              onPress={() => handlePowerAction('start')}
               disabled={powerMutation.isPending}
             >
               <Play size={20} color="#fff" />
@@ -217,7 +234,7 @@ export default function ServerOverviewScreen() {
 
             <TouchableOpacity
               style={[styles.powerButton, styles.powerButtonStop]}
-              onPress={() => powerMutation.mutate('stop')}
+              onPress={() => handlePowerAction('stop')}
               disabled={powerMutation.isPending}
             >
               <Square size={20} color="#fff" />
@@ -226,7 +243,7 @@ export default function ServerOverviewScreen() {
 
             <TouchableOpacity
               style={[styles.powerButton, styles.powerButtonRestart]}
-              onPress={() => powerMutation.mutate('restart')}
+              onPress={() => handlePowerAction('restart')}
               disabled={powerMutation.isPending}
             >
               <RotateCw size={20} color="#fff" />
@@ -235,7 +252,7 @@ export default function ServerOverviewScreen() {
 
             <TouchableOpacity
               style={[styles.powerButton, styles.powerButtonKill]}
-              onPress={() => powerMutation.mutate('kill')}
+              onPress={() => handlePowerAction('kill')}
               disabled={powerMutation.isPending}
             >
               <Power size={20} color="#fff" />

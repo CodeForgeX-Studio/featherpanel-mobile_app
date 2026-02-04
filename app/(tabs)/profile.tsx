@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIn
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
-import { LogOut, Settings, Info, ExternalLink, Shield, Globe, User as UserIcon, Lock, Network } from 'lucide-react-native';
+import { LogOut, Settings, Info, FileClock, ExternalLink, Shield, Globe, User as UserIcon, Lock, Network, } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -27,7 +27,7 @@ export default function ProfileScreen() {
       fetchSession().catch(() => undefined);
       const interval = setInterval(() => {
         fetchSession().catch(() => undefined);
-      }, 5000);
+      }, 1000);
       return () => clearInterval(interval);
     }
   }, [authToken, fetchSession]);
@@ -183,6 +183,15 @@ export default function ProfileScreen() {
           >
             <Info size={20} color={Colors.dark.textSecondary} />
             <Text style={styles.menuItemText}>About</Text>
+            <ExternalLink size={16} color={Colors.dark.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/activity-log')}
+          >
+            <FileClock size={20} color={Colors.dark.textSecondary} />
+            <Text style={styles.menuItemText}>Activity Log</Text>
             <ExternalLink size={16} color={Colors.dark.textMuted} />
           </TouchableOpacity>
 

@@ -180,7 +180,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (state.instanceUrl && state.authToken) {
       interval = setInterval(() => {
         fetchSession().catch((e) => {});
-      }, 4000);
+      }, 1000);
     }
 
     return () => {

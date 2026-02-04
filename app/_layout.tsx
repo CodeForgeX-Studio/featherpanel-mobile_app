@@ -24,6 +24,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="server/[id]" options={{ headerTitle: "Server Management" }} />
       <Stack.Screen name="about" options={{ headerShown: false }} />
+      <Stack.Screen name="activity-log" options={{ headerShown: false }} />
     </Stack>
   );
 }
