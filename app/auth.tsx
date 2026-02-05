@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { WebView } from 'react-native-webview';
 import { useApp } from '@/contexts/AppContext';
+import { checkServerStatus, redirectIfOffline } from '@/lib/statusCheck';
 import Colors from '@/constants/colors';
 import { User as UserIcon, Lock, Mail, ArrowRight, Globe, Edit2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,10 +38,31 @@ export default function AuthScreen() {
   const [lastName, setLastName] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
+  const [isChecking, setIsChecking] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
   const { login, register, isLoginLoading, isRegisterLoading, instanceUrl } = useApp();
   const router = useRouter();
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!instanceUrl) {
+        setIsChecking(false);
+        return;
+      }
+
+      const isOnline = await checkServerStatus(instanceUrl);
+      if (!isOnline) {
+        redirectIfOffline(instanceUrl);
+        setIsChecking(false);
+        return;
+      }
+      setIsChecking(false);
+    };
+
+    checkStatus();
+  }, [instanceUrl]);
 
   const {
     data: settings,
@@ -56,9 +78,13 @@ export default function AuthScreen() {
       }
       return response.data.data.settings;
     },
-    enabled: !!instanceUrl,
+    enabled: !!instanceUrl && !isChecking,
     refetchInterval: 2000,
   });
+
+  if (isChecking) {
+    return null;
+  }
 
   const turnstileEnabled = settings?.turnstile_enabled === 'true';
   const turnstileKey = settings?.turnstile_key_pub;
@@ -135,7 +161,16 @@ export default function AuthScreen() {
     </html>
   `;
 
+  const resetTurnstileWidget = () => {
+    setTurnstileToken('');
+    if (webViewRef.current) {
+      webViewRef.current.postMessage('reset');
+    }
+  };
+
   const handleSubmit = async () => {
+    if (submitLoading) return;
+    setSubmitLoading(true);
     setError('');
 
     try {
@@ -207,6 +242,8 @@ export default function AuthScreen() {
       const msg = handleApiError(err);
       setError(msg);
       resetTurnstileWidget();
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -219,12 +256,14 @@ export default function AuthScreen() {
     setFirstName('');
     setLastName('');
     setTurnstileToken('');
+    setSubmitLoading(false);
     if (webViewRef.current) {
       webViewRef.current.postMessage('reset');
     }
   };
 
-  const isLoading = isLoginLoading || isRegisterLoading || isSettingsLoading;
+  const isButtonLoading = submitLoading || isLoginLoading || isRegisterLoading;
+  const isSettingsLoadingOnly = isSettingsLoading && !submitLoading && !isLoginLoading && !isRegisterLoading;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -256,6 +295,7 @@ export default function AuthScreen() {
                   ]
                 );
               }}
+              disabled={isButtonLoading || isSettingsLoading}
             >
               <Globe size={16} color={Colors.dark.primary} />
               <Text style={styles.instanceUrlText} numberOfLines={1}>
@@ -278,6 +318,7 @@ export default function AuthScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  editable={!isButtonLoading}
                 />
               </View>
             </View>
@@ -297,6 +338,7 @@ export default function AuthScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       keyboardType="email-address"
+                      editable={!isButtonLoading}
                     />
                   </View>
                 </View>
@@ -312,6 +354,7 @@ export default function AuthScreen() {
                         value={firstName}
                         onChangeText={setFirstName}
                         autoCapitalize="words"
+                        editable={!isButtonLoading}
                       />
                     </View>
                   </View>
@@ -326,6 +369,7 @@ export default function AuthScreen() {
                         value={lastName}
                         onChangeText={setLastName}
                         autoCapitalize="words"
+                        editable={!isButtonLoading}
                       />
                     </View>
                   </View>
@@ -348,6 +392,7 @@ export default function AuthScreen() {
                   autoCorrect={false}
                   returnKeyType="go"
                   onSubmitEditing={handleSubmit}
+                  editable={!isButtonLoading}
                 />
               </View>
             </View>
@@ -401,11 +446,11 @@ export default function AuthScreen() {
             ) : null}
 
             <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
+              style={[styles.button, isButtonLoading && styles.buttonDisabled]}
               onPress={handleSubmit}
-              disabled={isLoading}
+              disabled={isButtonLoading}
             >
-              {isLoading ? (
+              {isButtonLoading ? (
                 <ActivityIndicator color={Colors.dark.text} />
               ) : (
                 <>
@@ -418,7 +463,7 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={styles.switchButton}
               onPress={handleToggleMode}
-              disabled={isLoading}
+              disabled={isButtonLoading || isSettingsLoadingOnly}
             >
               <Text style={styles.switchText}>
                 {isLogin ? "Don't have an account? " : 'Already have an account? '}

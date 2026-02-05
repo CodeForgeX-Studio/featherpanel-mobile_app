@@ -19,6 +19,7 @@ function RootLayoutNav() {
       headerTitleStyle: { color: '#E8EDF2' },
     }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="errors" options={{ headerShown: false }} />
       <Stack.Screen name="instance-setup" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
