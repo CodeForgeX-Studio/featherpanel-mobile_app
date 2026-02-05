@@ -5,47 +5,114 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
-import { Network, Trash2, Star, RefreshCw } from 'lucide-react-native';
+import { createApiClient } from '@/lib/api';
+import { Network, Trash2, Star, RefreshCw, Plus } from 'lucide-react-native';
 
 interface Allocation {
   id: number;
   ip: string;
+  ip_alias: string;
   port: number;
   is_primary: boolean;
+  notes: string;
 }
 
 export default function ServerAllocationsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { apiClient } = useApp();
+  const { instanceUrl, authToken } = useApp();
   const queryClient = useQueryClient();
 
   const { data: response, isLoading, error, refetch } = useQuery({
-    queryKey: ['server-allocations', id],
+    queryKey: ['server-allocations', id, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const res = await apiClient.get(`/api/user/servers/${id}/allocations`);
-      return res.data;
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/allocations`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch allocations';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    enabled: !!apiClient && !!id,
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    refetchInterval: 1000,
+    staleTime: 0,
+  });
+
+  const autoAssignMutation = useMutation({
+    mutationFn: async () => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/allocations/auto`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to assign allocation';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-allocations', id] });
+      Alert.alert('Success', data.message || 'Allocation assigned successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to assign allocation');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (allocationId: number) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.delete(`/api/user/servers/${id}/allocations/${allocationId}`);
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.delete(`/api/user/servers/${id}/allocations/${allocationId}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to delete allocation';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['server-allocations', id] });
+      Alert.alert('Success', data.data?.message || 'Allocation deleted successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to delete allocation');
     },
   });
 
   const setPrimaryMutation = useMutation({
     mutationFn: async (allocationId: number) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.post(`/api/user/servers/${id}/allocations/${allocationId}/primary`);
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/allocations/${allocationId}/primary`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to set primary allocation';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['server-allocations', id] });
+      Alert.alert('Success', data.message || 'Primary allocation updated successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to set primary allocation');
     },
   });
 
@@ -80,21 +147,40 @@ export default function ServerAllocationsScreen() {
     );
   };
 
-  const allocations: Allocation[] = response?.allocations || [];
+  const handleAutoAssign = () => {
+    if (!canAddMore) {
+      Alert.alert('Limit Reached', 'You have reached the allocation limit for this server.');
+      return;
+    }
+
+    Alert.alert(
+      'Auto Assign Allocation',
+      'Automatically assign a new allocation to this server?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Assign', onPress: () => autoAssignMutation.mutate() },
+      ]
+    );
+  };
+
+  const allocations: Allocation[] = response?.data?.allocations || [];
+  const allocationLimit = response?.data?.server?.allocation_limit || 0;
+  const currentAllocations = response?.data?.server?.current_allocations || 0;
+  const canAddMore = response?.data?.server?.can_add_more || false;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerCount}>{allocations.length} Allocation{allocations.length !== 1 ? 's' : ''}</Text>
-          <Text style={styles.headerLimit}>Limit: {response?.server?.allocation_limit || 'Unlimited'}</Text>
+          <Text style={styles.headerCount}>{currentAllocations} Allocation{currentAllocations !== 1 ? 's' : ''}</Text>
+          <Text style={styles.headerLimit}>Limit: {allocationLimit}</Text>
         </View>
         <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={() => refetch()}
-          disabled={isLoading}
+          style={styles.addButton}
+          onPress={handleAutoAssign}
+          disabled={!canAddMore || autoAssignMutation.isPending}
         >
-          <RefreshCw size={20} color={Colors.dark.primary} />
+          <Plus size={20} color={!canAddMore ? Colors.dark.textMuted : Colors.dark.primary} />
         </TouchableOpacity>
       </View>
 
@@ -115,12 +201,17 @@ export default function ServerAllocationsScreen() {
               <View style={styles.allocationHeader}>
                 <Network size={24} color={Colors.dark.primary} />
                 <View style={styles.allocationInfo}>
-                  <Text style={styles.allocationAddress}>{item.ip}:{item.port}</Text>
+                  <Text style={styles.allocationAddress}>
+                    {item.ip_alias || item.ip}:{item.port}
+                  </Text>
                   {item.is_primary && (
                     <View style={styles.primaryBadge}>
                       <Star size={12} color={Colors.dark.warning} fill={Colors.dark.warning} />
                       <Text style={styles.primaryText}>Primary</Text>
                     </View>
+                  )}
+                  {item.notes && (
+                    <Text style={styles.allocationNotes}>{item.notes}</Text>
                   )}
                 </View>
               </View>
@@ -188,7 +279,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
-  refreshButton: {
+  addButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
@@ -220,7 +311,7 @@ const styles = StyleSheet.create({
   },
   allocationHeader: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 12,
     gap: 12,
   },
@@ -232,7 +323,12 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.dark.text,
     fontFamily: 'monospace',
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  allocationNotes: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginTop: 4,
   },
   primaryBadge: {
     flexDirection: 'row' as const,

@@ -1,79 +1,246 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView, Switch, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
-import { Archive, Download, Trash2, Lock, Unlock, RotateCw, RefreshCw } from 'lucide-react-native';
+import { createApiClient } from '@/lib/api';
+import { HardDrive, Plus, Trash2, Download, RotateCcw, Lock, Unlock, X, FileArchive } from 'lucide-react-native';
 
-interface Backup {
+interface ServerBackup {
   id: number;
   uuid: string;
   name: string;
+  ignored_files: string;
+  disk: string;
+  checksum: string;
+  bytes: number;
   is_successful: number;
   is_locked: number;
+  completed_at: string;
   created_at: string;
-  disk: string;
 }
 
 export default function ServerBackupsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { apiClient } = useApp();
+  const { instanceUrl, authToken } = useApp();
   const queryClient = useQueryClient();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [backupName, setBackupName] = useState('');
+  const [ignoredFiles, setIgnoredFiles] = useState('');
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [selectedBackup, setSelectedBackup] = useState<ServerBackup | null>(null);
+  const [truncateDirectory, setTruncateDirectory] = useState(true);
 
-  const { data: response, isLoading, error, refetch } = useQuery({
-    queryKey: ['server-backups', id],
+  const { data: serverResponse } = useQuery({
+    queryKey: ['server', id, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const res = await apiClient.get(`/api/user/servers/${id}/backups`);
-      return res.data;
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch server';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    enabled: !!apiClient && !!id,
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    staleTime: 0,
+  });
+
+  const { data: response, isLoading, error } = useQuery({
+    queryKey: ['server-backups', id, instanceUrl, authToken],
+    queryFn: async () => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/backups`, {
+        params: { page: 1 }
+      });
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch backups';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    refetchInterval: 1000,
+    staleTime: 0,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { name: string; ignore: string }) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/backups`, data);
+      
+      if (response.status !== 202 && response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to create backup';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+      setShowCreateModal(false);
+      setBackupName('');
+      setIgnoredFiles('');
+      Alert.alert('Success', data.message || 'Backup initiated successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to create backup');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (backupUuid: string) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.delete(`/api/user/servers/${id}/backups/${backupUuid}`);
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.delete(`/api/user/servers/${id}/backups/${backupUuid}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to delete backup';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+      Alert.alert('Success', data.message || 'Backup deleted successfully');
     },
-  });
-
-  const toggleLockMutation = useMutation({
-    mutationFn: async ({ backupUuid, isLocked }: { backupUuid: string; isLocked: boolean }) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const endpoint = isLocked ? 'unlock' : 'lock';
-      await apiClient.post(`/api/user/servers/${id}/backups/${backupUuid}/${endpoint}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to delete backup');
     },
   });
 
   const restoreMutation = useMutation({
-    mutationFn: async (backupUuid: string) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.post(`/api/user/servers/${id}/backups/${backupUuid}/restore`, {
-        truncate_directory: false,
+    mutationFn: async (data: { uuid: string; truncate_directory: boolean }) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/backups/${data.uuid}/restore`, {
+        truncate_directory: data.truncate_directory
       });
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to restore backup';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
-      Alert.alert('Success', 'Backup restoration started');
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+      setShowRestoreModal(false);
+      setSelectedBackup(null);
+      Alert.alert('Success', data.message || 'Backup restoration initiated successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to restore backup');
     },
   });
 
-  const handleDelete = (backup: Backup) => {
-    if (backup.is_locked) {
-      Alert.alert('Locked', 'This backup is locked. Unlock it first to delete.');
+  const lockMutation = useMutation({
+    mutationFn: async (backupUuid: string) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/backups/${backupUuid}/lock`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to lock backup';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+      Alert.alert('Success', data.message || 'Backup locked successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to lock backup');
+    },
+  });
+
+  const unlockMutation = useMutation({
+    mutationFn: async (backupUuid: string) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/backups/${backupUuid}/unlock`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to unlock backup';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-backups', id] });
+      Alert.alert('Success', data.message || 'Backup unlocked successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to unlock backup');
+    },
+  });
+
+  const handleDownload = async (backup: ServerBackup) => {
+    try {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/backups/${backup.uuid}/download`);
+      
+      if (response.status !== 200 || !response.data?.data?.download_url) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to get download URL';
+        throw new Error(message);
+      }
+      
+      const downloadUrl = response.data.data.download_url;
+      const supported = await Linking.canOpenURL(downloadUrl);
+      
+      if (supported) {
+        await Linking.openURL(downloadUrl);
+      } else {
+        Alert.alert('Download URL', downloadUrl);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to download backup');
+    }
+  };
+
+  const handleDelete = (backup: ServerBackup) => {
+    if (backup.is_locked === 1) {
+      Alert.alert('Locked', 'This backup is locked and cannot be deleted. Unlock it first.');
       return;
     }
 
     Alert.alert(
       'Delete Backup',
-      `Are you sure you want to delete ${backup.name}?`,
+      `Are you sure you want to delete ${backup.name}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -85,39 +252,73 @@ export default function ServerBackupsScreen() {
     );
   };
 
-  const handleRestore = (backup: Backup) => {
-    Alert.alert(
-      'Restore Backup',
-      `Restore ${backup.name}? Your server will be stopped during restoration.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Restore', 
-          onPress: () => restoreMutation.mutate(backup.uuid),
-        },
-      ]
-    );
+  const handleRestore = (backup: ServerBackup) => {
+    setSelectedBackup(backup);
+    setShowRestoreModal(true);
   };
 
-  const backups: Backup[] = response?.data || [];
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+  const handleToggleLock = (backup: ServerBackup) => {
+    if (backup.is_locked === 1) {
+      unlockMutation.mutate(backup.uuid);
+    } else {
+      lockMutation.mutate(backup.uuid);
+    }
   };
+
+  const handleCreate = () => {
+    if (!backupName.trim()) {
+      Alert.alert('Error', 'Please enter a backup name');
+      return;
+    }
+
+    const ignoredFilesArray = ignoredFiles
+      .split(',')
+      .map(f => f.trim())
+      .filter(f => f.length > 0);
+
+    createMutation.mutate({
+      name: backupName.trim(),
+      ignore: JSON.stringify(ignoredFilesArray),
+    });
+  };
+
+  const handleConfirmRestore = () => {
+    if (!selectedBackup) return;
+
+    restoreMutation.mutate({
+      uuid: selectedBackup.uuid,
+      truncate_directory: truncateDirectory,
+    });
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
+
+  const backups: ServerBackup[] = response?.data?.data || [];
+  const backupLimit = serverResponse?.data?.backup_limit || 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Text style={styles.headerCount}>{backups.length} Backup{backups.length !== 1 ? 's' : ''}</Text>
-          <Text style={styles.headerLimit}>Limit: {response?.pagination?.total || 0}</Text>
+          <Text style={styles.headerLimit}>Limit: {backupLimit}</Text>
         </View>
         <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={() => refetch()}
-          disabled={isLoading}
+          style={styles.createButton}
+          onPress={() => setShowCreateModal(true)}
+          disabled={backups.length >= backupLimit}
         >
-          <RefreshCw size={20} color={Colors.dark.primary} />
+          <Plus size={20} color={backups.length >= backupLimit ? Colors.dark.textMuted : Colors.dark.primary} />
         </TouchableOpacity>
       </View>
 
@@ -132,63 +333,209 @@ export default function ServerBackupsScreen() {
       ) : (
         <FlatList
           data={backups}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.uuid}
           renderItem={({ item }) => (
             <View style={styles.backupCard}>
               <View style={styles.backupHeader}>
-                <Archive size={24} color={item.is_successful ? Colors.dark.primary : Colors.dark.danger} />
-                <View style={styles.backupTitleContainer}>
-                  <Text style={styles.backupName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.backupDate}>{formatDate(item.created_at)}</Text>
+                <View style={styles.backupHeaderLeft}>
+                  <HardDrive size={24} color={Colors.dark.primary} />
+                  <View style={styles.backupHeaderText}>
+                    <Text style={styles.backupName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.backupDate}>{formatDate(item.completed_at || item.created_at)}</Text>
+                  </View>
                 </View>
                 {item.is_locked === 1 && (
                   <Lock size={18} color={Colors.dark.warning} />
                 )}
               </View>
 
+              <View style={styles.backupInfo}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Size:</Text>
+                  <Text style={styles.infoValue}>{formatBytes(item.bytes)}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Checksum:</Text>
+                  <Text style={styles.infoValue} numberOfLines={1}>{item.checksum}</Text>
+                </View>
+                {item.ignored_files && item.ignored_files !== '[]' && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Ignored:</Text>
+                    <Text style={styles.infoValue} numberOfLines={1}>{item.ignored_files}</Text>
+                  </View>
+                )}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Status:</Text>
+                  <Text style={[styles.infoValue, item.is_successful === 1 ? styles.successText : styles.errorText]}>
+                    {item.is_successful === 1 ? 'Successful' : 'Failed'}
+                  </Text>
+                </View>
+              </View>
+
               <View style={styles.backupActions}>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.restoreButton]}
-                  onPress={() => handleRestore(item)}
-                  disabled={restoreMutation.isPending}
+                  style={styles.actionButton}
+                  onPress={() => handleDownload(item)}
                 >
-                  <RotateCw size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Restore</Text>
+                  <Download size={18} color={Colors.dark.primary} />
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.lockButton]}
-                  onPress={() => toggleLockMutation.mutate({ backupUuid: item.uuid, isLocked: item.is_locked === 1 })}
-                  disabled={toggleLockMutation.isPending}
+                  style={styles.actionButton}
+                  onPress={() => handleRestore(item)}
+                >
+                  <RotateCcw size={18} color={Colors.dark.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleToggleLock(item)}
+                  disabled={lockMutation.isPending || unlockMutation.isPending}
                 >
                   {item.is_locked === 1 ? (
-                    <><Unlock size={16} color="#fff" /><Text style={styles.actionButtonText}>Unlock</Text></>
+                    <Lock size={18} color={Colors.dark.warning} />
                   ) : (
-                    <><Lock size={16} color="#fff" /><Text style={styles.actionButtonText}>Lock</Text></>
+                    <Unlock size={18} color={Colors.dark.textMuted} />
                   )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
+                  style={[styles.actionButton, item.is_locked === 1 && styles.actionButtonDisabled]}
                   onPress={() => handleDelete(item)}
                   disabled={deleteMutation.isPending || item.is_locked === 1}
                 >
-                  <Trash2 size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Delete</Text>
+                  <Trash2 size={18} color={item.is_locked === 1 ? Colors.dark.textMuted : Colors.dark.danger} />
                 </TouchableOpacity>
               </View>
             </View>
           )}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Archive size={48} color={Colors.dark.textMuted} />
-              <Text style={styles.emptyText}>No backups yet</Text>
-              <Text style={styles.emptySubtext}>Create your first backup to protect your data</Text>
+              <FileArchive size={48} color={Colors.dark.textMuted} />
+              <Text style={styles.emptyText}>No backups found</Text>
+              <Text style={styles.emptySubtext}>Create your first backup to get started</Text>
             </View>
           }
           contentContainerStyle={styles.listContent}
         />
       )}
+
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Backup</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <X size={24} color={Colors.dark.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Backup Name</Text>
+              <Text style={styles.inputDescription}>A unique name for this backup</Text>
+              <TextInput
+                style={styles.input}
+                value={backupName}
+                onChangeText={setBackupName}
+                placeholder="backup-2026-02-05"
+                placeholderTextColor={Colors.dark.textMuted}
+              />
+
+              <Text style={styles.inputLabel}>Ignored Files (Optional)</Text>
+              <Text style={styles.inputDescription}>Comma-separated list of files or directories to exclude</Text>
+              <TextInput
+                style={styles.input}
+                value={ignoredFiles}
+                onChangeText={setIgnoredFiles}
+                placeholder="e.g., logs, temp, cache"
+                placeholderTextColor={Colors.dark.textMuted}
+                multiline
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleCreate}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showRestoreModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowRestoreModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Restore Backup</Text>
+              <TouchableOpacity onPress={() => setShowRestoreModal(false)}>
+                <X size={24} color={Colors.dark.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.restoreWarning}>
+                Are you sure you want to restore {selectedBackup?.name}?
+              </Text>
+
+              <View style={styles.switchContainer}>
+                <View style={styles.switchInfo}>
+                  <Text style={styles.switchLabel}>Truncate Directory</Text>
+                  <Text style={styles.switchDescription}>
+                    Delete all files before restoring backup
+                  </Text>
+                </View>
+                <Switch
+                  value={truncateDirectory}
+                  onValueChange={setTruncateDirectory}
+                  trackColor={{ false: Colors.dark.border, true: Colors.dark.primary + '80' }}
+                  thumbColor={truncateDirectory ? Colors.dark.primary : Colors.dark.textMuted}
+                />
+              </View>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowRestoreModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleConfirmRestore}
+                disabled={restoreMutation.isPending}
+              >
+                {restoreMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Restore</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -220,7 +567,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
-  refreshButton: {
+  createButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
@@ -239,6 +586,9 @@ const styles = StyleSheet.create({
     color: Colors.dark.danger,
     fontSize: 16,
   },
+  successText: {
+    color: Colors.dark.success,
+  },
   listContent: {
     padding: 16,
   },
@@ -253,10 +603,16 @@ const styles = StyleSheet.create({
   backupHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: 16,
-    gap: 12,
   },
-  backupTitleContainer: {
+  backupHeaderLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    flex: 1,
+  },
+  backupHeaderText: {
     flex: 1,
   },
   backupName: {
@@ -269,32 +625,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
   },
+  backupInfo: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+    fontWeight: '600' as const,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: Colors.dark.text,
+    fontFamily: 'monospace',
+    flex: 1,
+    textAlign: 'right' as const,
+  },
   backupActions: {
     flexDirection: 'row' as const,
     gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
   },
   actionButton: {
     flex: 1,
-    flexDirection: 'row' as const,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.bg,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
-  restoreButton: {
-    backgroundColor: Colors.dark.primary,
-  },
-  lockButton: {
-    backgroundColor: Colors.dark.warning,
-  },
-  deleteButton: {
-    backgroundColor: Colors.dark.danger,
-  },
-  actionButtonText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#fff',
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
   emptyContainer: {
     alignItems: 'center' as const,
@@ -311,5 +681,115 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textMuted,
     textAlign: 'center' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end' as const,
+  },
+  modalContent: {
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  inputDescription: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginBottom: 8,
+    marginTop: -4,
+  },
+  input: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: Colors.dark.text,
+  },
+  restoreWarning: {
+    fontSize: 14,
+    color: Colors.dark.text,
+    marginBottom: 20,
+  },
+  switchContainer: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    backgroundColor: Colors.dark.bg,
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  switchInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  switchLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  switchDescription: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+  },
+  modalFooter: {
+    flexDirection: 'row' as const,
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  modalButtonCreate: {
+    backgroundColor: Colors.dark.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
   },
 });
