@@ -1,45 +1,251 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
-import { Users, Mail, RefreshCw } from 'lucide-react-native';
+import { createApiClient } from '@/lib/api';
+import { Users, Mail, RefreshCw, Plus, Trash2, X, Edit, CheckSquare, Square } from 'lucide-react-native';
 
 interface Subuser {
   id: number;
+  user_id: number;
   username: string;
   email: string;
+  first_name: string;
+  last_name: string;
   permissions: string[];
+}
+
+interface GroupedPermissions {
+  [key: string]: {
+    permissions: string[];
+  };
 }
 
 export default function ServerSubusersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { apiClient } = useApp();
+  const { instanceUrl, authToken } = useApp();
+  const queryClient = useQueryClient();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [email, setEmail] = useState('');
+  const [selectedSubuser, setSelectedSubuser] = useState<Subuser | null>(null);
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const { data: response, isLoading, error, refetch } = useQuery({
-    queryKey: ['server-subusers', id],
+  const { data: response, isLoading, error } = useQuery({
+    queryKey: ['server-subusers', id, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const res = await apiClient.get(`/api/user/servers/${id}/subusers`);
-      return res.data;
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/subusers`, {
+        params: { page: 1, per_page: 20 }
+      });
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch subusers';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    enabled: !!apiClient && !!id,
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    refetchInterval: 1000,
+    staleTime: 0,
   });
 
-  const subusers: Subuser[] = response?.data || [];
+  const { data: permissionsResponse } = useQuery({
+    queryKey: ['server-permissions', id, instanceUrl, authToken],
+    queryFn: async () => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/subusers/permissions`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch permissions';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    staleTime: 0,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { email: string }) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/subusers`, data);
+      
+      if (response.status !== 201 && response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to create subuser';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-subusers', id] });
+      setShowCreateModal(false);
+      setEmail('');
+      Alert.alert('Success', data.message || 'Subuser created successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to create subuser');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: { subuserId: number; permissions: string[] }) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.patch(`/api/user/servers/${id}/subusers/${data.subuserId}`, {
+        permissions: data.permissions
+      });
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to update subuser';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-subusers', id] });
+      setShowEditModal(false);
+      setSelectedSubuser(null);
+      setSelectedPermissions([]);
+      Alert.alert('Success', data.message || 'Subuser updated successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to update subuser');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (subuserId: number) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.delete(`/api/user/servers/${id}/subusers/${subuserId}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to delete subuser';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-subusers', id] });
+      Alert.alert('Success', data.message || 'Subuser deleted successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to delete subuser');
+    },
+  });
+
+  const handleCreate = () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter an email address');
+      return;
+    }
+
+    createMutation.mutate({ email: email.trim() });
+  };
+
+  const handleEdit = (subuser: Subuser) => {
+    setSelectedSubuser(subuser);
+    setSelectedPermissions(subuser.permissions || []);
+    setShowEditModal(true);
+  };
+
+  const handleDelete = (subuser: Subuser) => {
+    Alert.alert(
+      'Delete Subuser',
+      `Remove ${subuser.username} from this server?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          onPress: () => deleteMutation.mutate(subuser.id), 
+          style: 'destructive' 
+        },
+      ]
+    );
+  };
+
+  const handleUpdatePermissions = () => {
+    if (!selectedSubuser) return;
+
+    updateMutation.mutate({
+      subuserId: selectedSubuser.id,
+      permissions: selectedPermissions,
+    });
+  };
+
+  const togglePermission = (permission: string) => {
+    setSelectedPermissions(prev => {
+      if (prev.includes(permission)) {
+        return prev.filter(p => p !== permission);
+      } else {
+        return [...prev, permission];
+      }
+    });
+  };
+
+  const toggleGroupPermissions = (groupPermissions: string[]) => {
+    const allSelected = groupPermissions.every(p => selectedPermissions.includes(p));
+    
+    if (allSelected) {
+      setSelectedPermissions(prev => prev.filter(p => !groupPermissions.includes(p)));
+    } else {
+      setSelectedPermissions(prev => {
+        const newPerms = [...prev];
+        groupPermissions.forEach(p => {
+          if (!newPerms.includes(p)) {
+            newPerms.push(p);
+          }
+        });
+        return newPerms;
+      });
+    }
+  };
+
+  const selectAllPermissions = () => {
+    const allPermissions = permissionsResponse?.data?.permissions || [];
+    setSelectedPermissions(allPermissions);
+  };
+
+  const deselectAllPermissions = () => {
+    setSelectedPermissions([]);
+  };
+
+  const subusers: Subuser[] = response?.data?.data || [];
+  const groupedPermissions: GroupedPermissions = permissionsResponse?.data?.grouped_permissions || {};
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <Text style={styles.headerCount}>{subusers.length} Subuser{subusers.length !== 1 ? 's' : ''}</Text>
         <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={() => refetch()}
-          disabled={isLoading}
+          style={styles.addButton}
+          onPress={() => setShowCreateModal(true)}
         >
-          <RefreshCw size={20} color={Colors.dark.primary} />
+          <Plus size={20} color={Colors.dark.primary} />
         </TouchableOpacity>
       </View>
 
@@ -60,7 +266,9 @@ export default function ServerSubusersScreen() {
               <View style={styles.subuserHeader}>
                 <Users size={24} color={Colors.dark.primary} />
                 <View style={styles.subuserInfo}>
-                  <Text style={styles.subuserName}>{item.username}</Text>
+                  <Text style={styles.subuserName}>
+                    {item.first_name} {item.last_name} (@{item.username})
+                  </Text>
                   <View style={styles.emailRow}>
                     <Mail size={14} color={Colors.dark.textMuted} />
                     <Text style={styles.subuserEmail}>{item.email}</Text>
@@ -69,7 +277,26 @@ export default function ServerSubusersScreen() {
               </View>
 
               <View style={styles.permissionsContainer}>
-                <Text style={styles.permissionsLabel}>Permissions: {item.permissions.length}</Text>
+                <Text style={styles.permissionsLabel}>
+                  Permissions: {item.permissions?.length || 0}
+                </Text>
+              </View>
+
+              <View style={styles.subuserActions}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.editButton]}
+                  onPress={() => handleEdit(item)}
+                >
+                  <Edit size={16} color="#fff" />
+                  <Text style={styles.actionButtonText}>Edit Permissions</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => handleDelete(item)}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 size={16} color="#fff" />
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -83,6 +310,153 @@ export default function ServerSubusersScreen() {
           contentContainerStyle={styles.listContent}
         />
       )}
+
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Subuser</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <X size={24} color={Colors.dark.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <Text style={styles.inputDescription}>Enter the email of an existing user</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="user@example.com"
+                placeholderTextColor={Colors.dark.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleCreate}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContentLarge}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Permissions</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <X size={24} color={Colors.dark.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectAllContainer}>
+              <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={selectAllPermissions}
+              >
+                <Text style={styles.selectAllButtonText}>Select All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={deselectAllPermissions}
+              >
+                <Text style={styles.selectAllButtonText}>Deselect All</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBodyScroll}>
+              {Object.entries(groupedPermissions).map(([groupName, group]) => {
+                const allGroupSelected = group.permissions.every(p => selectedPermissions.includes(p));
+                const someGroupSelected = group.permissions.some(p => selectedPermissions.includes(p));
+
+                return (
+                  <View key={groupName} style={styles.permissionGroup}>
+                    <TouchableOpacity
+                      style={styles.permissionGroupHeader}
+                      onPress={() => toggleGroupPermissions(group.permissions)}
+                    >
+                      {allGroupSelected ? (
+                        <CheckSquare size={20} color={Colors.dark.primary} />
+                      ) : someGroupSelected ? (
+                        <Square size={20} color={Colors.dark.primary} />
+                      ) : (
+                        <Square size={20} color={Colors.dark.textMuted} />
+                      )}
+                      <Text style={styles.permissionGroupName}>
+                        {groupName.charAt(0).toUpperCase() + groupName.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {group.permissions.map((permission) => (
+                      <TouchableOpacity
+                        key={permission}
+                        style={styles.permissionItem}
+                        onPress={() => togglePermission(permission)}
+                      >
+                        {selectedPermissions.includes(permission) ? (
+                          <CheckSquare size={18} color={Colors.dark.primary} />
+                        ) : (
+                          <Square size={18} color={Colors.dark.textMuted} />
+                        )}
+                        <Text style={styles.permissionName}>{permission}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleUpdatePermissions}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Update</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -106,7 +480,7 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.dark.text,
   },
-  refreshButton: {
+  addButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
@@ -138,7 +512,7 @@ const styles = StyleSheet.create({
   },
   subuserHeader: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 12,
     gap: 12,
   },
@@ -149,7 +523,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   emailRow: {
     flexDirection: 'row' as const,
@@ -162,12 +536,39 @@ const styles = StyleSheet.create({
   },
   permissionsContainer: {
     paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.dark.border,
   },
   permissionsLabel: {
     fontSize: 13,
     color: Colors.dark.textSecondary,
+  },
+  subuserActions: {
+    flexDirection: 'row' as const,
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  editButton: {
+    backgroundColor: Colors.dark.primary,
+  },
+  deleteButton: {
+    backgroundColor: Colors.dark.danger,
+    flex: 0,
+    paddingHorizontal: 16,
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
   emptyContainer: {
     alignItems: 'center' as const,
@@ -184,5 +585,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textMuted,
     textAlign: 'center' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end' as const,
+  },
+  modalContent: {
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalContentLarge: {
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalBodyScroll: {
+    padding: 20,
+    maxHeight: '70%',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 8,
+  },
+  inputDescription: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: Colors.dark.text,
+  },
+  selectAllContainer: {
+    flexDirection: 'row' as const,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  selectAllButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.dark.bg,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  selectAllButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  permissionGroup: {
+    marginBottom: 20,
+  },
+  permissionGroupHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    padding: 12,
+    backgroundColor: Colors.dark.bg,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  permissionGroupName: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  permissionItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    padding: 12,
+    backgroundColor: Colors.dark.bg,
+    borderRadius: 8,
+    marginBottom: 4,
+    marginLeft: 16,
+  },
+  permissionName: {
+    fontSize: 13,
+    color: Colors.dark.text,
+    fontFamily: 'monospace',
+  },
+  modalFooter: {
+    flexDirection: 'row' as const,
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  modalButtonCreate: {
+    backgroundColor: Colors.dark.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
   },
 });
