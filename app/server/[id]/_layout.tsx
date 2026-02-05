@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import React from "react";
 import Colors from "@/constants/colors";
+import { HeaderBackButton } from '@react-navigation/elements';
 
 export default function ServerDetailLayout() {
   return (
@@ -16,6 +17,13 @@ export default function ServerDetailLayout() {
         name="index"
         options={{
           title: "Overview",
+          headerBackVisible: true,
+          headerLeft: ({ navigation }) => (
+            <HeaderBackButton 
+              tintColor="white"
+              onPress={() => navigation.navigate('(tabs)/servers')}
+            />
+          ),
         }}
       />
       <Stack.Screen
