@@ -13,19 +13,6 @@ export default function ServerDetailLayout() {
       }}
     >
       <Stack.Screen
-        name="files/edit"
-        options={{
-          title: "Edit File",
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="files/create"
-        options={{
-          title: "Create File",
-        }}
-      />
-      <Stack.Screen
         name="index"
         options={{
           title: "Overview",
@@ -41,6 +28,12 @@ export default function ServerDetailLayout() {
         name="files"
         options={{
           title: "Files",
+        }}
+      />
+      <Stack.Screen
+        name="file-manager"
+        options={{
+          title: "File Manager",
         }}
       />
       <Stack.Screen

@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingVi
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
-import { Server, ArrowRight } from 'lucide-react-native';
+import { Server, ArrowRight, Lock, Globe } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 export default function InstanceSetupScreen() {
   const [url, setUrl] = useState('');
+  const [useHttps, setUseHttps] = useState(true);
   const [error, setError] = useState('');
   const { setInstanceUrl } = useApp();
   const router = useRouter();
@@ -26,13 +27,15 @@ export default function InstanceSetupScreen() {
     setError('');
     
     if (!url.trim()) {
-      setError('Please enter an instance URL');
+      setError('Please enter a domain');
       return;
     }
 
     let cleanUrl = url.trim();
-    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-      cleanUrl = 'https://' + cleanUrl;
+    
+    if (!cleanUrl.includes('://')) {
+      const protocol = useHttps ? 'https://' : 'http://';
+      cleanUrl = `${protocol}${cleanUrl}`;
     }
 
     if (cleanUrl.endsWith('/')) {
@@ -40,7 +43,7 @@ export default function InstanceSetupScreen() {
     }
 
     if (!validateUrl(cleanUrl)) {
-      setError('Please enter a valid URL');
+      setError('Please enter a valid domain');
       return;
     }
 
@@ -92,13 +95,31 @@ export default function InstanceSetupScreen() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </View>
 
-            <View style={styles.exampleContainer}>
-              <Text style={styles.exampleTitle}>Examples:</Text>
-              <TouchableOpacity onPress={() => setUrl('https://panel.example.com')}>
-                <Text style={styles.exampleText}>• https://panel.example.com</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setUrl('http://panel.example.com')}>
-                <Text style={styles.exampleText}>• http://panel.example.com</Text>
+            <View style={styles.protocolSection}>
+              <Text style={styles.protocolLabel}>Protocol</Text>
+              <Text style={styles.protocolDescription}>Tap to toggle between HTTP/HTTPS</Text>
+              <TouchableOpacity 
+                style={[
+                  styles.protocolToggle, 
+                  useHttps && styles.protocolToggleActive
+                ]}
+                onPress={() => setUseHttps(!useHttps)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.protocolContent}>
+                  <View style={[
+                    styles.protocolIcon, 
+                    useHttps ? styles.httpsIcon : styles.httpIcon
+                  ]}>
+                    {useHttps ? <Lock size={18} color={Colors.dark.primary} /> : <Globe size={18} color={Colors.dark.textMuted} />}
+                  </View>
+                  <Text style={[
+                    styles.protocolText, 
+                    useHttps ? styles.protocolTextActive : styles.protocolTextInactive
+                  ]}>
+                    {useHttps ? 'https:// (recommended)' : 'http://'}
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -114,7 +135,7 @@ export default function InstanceSetupScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Don&apos;t have an instance? Contact your hosting provider or visit
+              Don't have an instance? Contact your hosting provider or visit
             </Text>
             <Text style={styles.footerLink}>featherpanel.com</Text>
           </View>
@@ -194,25 +215,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
   },
-  exampleContainer: {
-    backgroundColor: Colors.dark.bgSecondary,
-    borderRadius: 12,
-    padding: 16,
+  protocolSection: {
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
   },
-  exampleTitle: {
+  protocolLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.dark.textSecondary,
-    marginBottom: 8,
+    color: Colors.dark.text,
+    marginBottom: 4,
   },
-  exampleText: {
+  protocolDescription: {
     fontSize: 14,
-    color: Colors.dark.textMuted,
-    marginVertical: 4,
+    color: Colors.dark.textSecondary,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  protocolToggle: {
+    backgroundColor: Colors.dark.bgSecondary,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    padding: 16,
+  },
+  protocolToggleActive: {
+    backgroundColor: Colors.dark.primary + '10',
+    borderColor: Colors.dark.primary,
+  },
+  protocolContent: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  protocolIcon: {
+    marginRight: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  httpsIcon: {
+    backgroundColor: Colors.dark.primary + '20',
+  },
+  httpIcon: {
+    backgroundColor: Colors.dark.textMuted + '20',
+  },
+  protocolText: {
+    fontSize: 16,
     fontFamily: 'monospace' as const,
+    fontWeight: '500' as const,
+  },
+  protocolTextActive: {
+    color: Colors.dark.primary,
+  },
+  protocolTextInactive: {
+    color: Colors.dark.textMuted,
   },
   button: {
     backgroundColor: Colors.dark.primary,

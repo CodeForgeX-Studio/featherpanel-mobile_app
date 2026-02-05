@@ -102,7 +102,7 @@ export default function ServerFilesScreen() {
     },
     onSuccess: ({ content, file }) => {
       router.push({
-        pathname: `/server/${id}/files/edit`,
+        pathname: `/server/${id}/file-manager/edit`,
         params: { 
           id, 
           path: file.path.slice(1), 
@@ -261,7 +261,7 @@ export default function ServerFilesScreen() {
           <TouchableOpacity 
             style={styles.iconButton}
             onPress={() => router.push({
-              pathname: `/server/${id}/files/create`,
+              pathname: `/server/${id}/file-manager/create`,
               params: { path: currentPath }
             })}
           >
@@ -270,7 +270,7 @@ export default function ServerFilesScreen() {
           <TouchableOpacity 
             style={styles.iconButton}
             onPress={() => router.push({
-              pathname: `/server/${id}/files/create-folder`,
+              pathname: `/server/${id}/file-manager/create-folder`,
               params: { path: currentPath }
             })}
           >

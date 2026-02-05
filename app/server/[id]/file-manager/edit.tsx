@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -19,7 +19,6 @@ export default function FileEditScreen() {
   const { instanceUrl, authToken } = useApp();
   const queryClient = useQueryClient();
   const [fileContent, setFileContent] = useState('');
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -45,17 +44,12 @@ export default function FileEditScreen() {
         throw new Error(response.data?.error_message || response.data?.message || 'Failed to save file');
       }
     },
-    onMutate: () => {
-      setSaving(true);
-    },
     onSuccess: () => {
-      setSaving(false);
       Alert.alert('Success', 'File saved successfully');
       queryClient.invalidateQueries({ queryKey: ['server-files', id] });
       router.back();
     },
     onError: (error: any) => {
-      setSaving(false);
       Alert.alert('Error', error?.message || 'Failed to save file');
     }
   });
@@ -65,26 +59,24 @@ export default function FileEditScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.dark.bg }}>
-      <View style={{ 
-        flexDirection: 'row', 
-        padding: 16, 
-        backgroundColor: Colors.dark.bgSecondary,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.dark.border,
-        alignItems: 'center'
-      }}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
           <ChevronLeft size={24} color={Colors.dark.primary} />
         </TouchableOpacity>
-        <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 12 }}>
-          <Text style={{ color: Colors.dark.text, fontSize: 18, fontWeight: '600' }}>
+        <View style={{ flex: 1, paddingLeft: 12 }}>
+          <Text style={{ 
+            color: Colors.dark.text, 
+            fontSize: 18, 
+            fontWeight: '600',
+            fontFamily: 'monospace'
+          }}>
             {filename}
           </Text>
         </View>
         <TouchableOpacity 
           onPress={handleSave} 
-          disabled={saving || saveMutation.isPending}
+          disabled={saveMutation.isPending}
           style={[
             {
               flexDirection: 'row',
@@ -95,10 +87,10 @@ export default function FileEditScreen() {
               alignItems: 'center',
               gap: 6
             },
-            (saving || saveMutation.isPending) && { opacity: 0.6 }
+            saveMutation.isPending && { opacity: 0.6 }
           ]}
         >
-          {saving || saveMutation.isPending ? (
+          {saveMutation.isPending ? (
             <ActivityIndicator size={16} color="white" />
           ) : (
             <>
@@ -130,3 +122,18 @@ export default function FileEditScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.dark.bg,
+  },
+  header: {
+    flexDirection: 'row', 
+    padding: 16, 
+    backgroundColor: Colors.dark.bgSecondary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+    alignItems: 'center'
+  },
+});

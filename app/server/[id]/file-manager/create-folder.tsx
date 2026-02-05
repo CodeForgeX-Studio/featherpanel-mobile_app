@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -15,7 +15,6 @@ export default function FolderCreateScreen() {
   const queryClient = useQueryClient();
   
   const [folderName, setFolderName] = useState('');
-  const [creating, setCreating] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -33,17 +32,12 @@ export default function FolderCreateScreen() {
         throw new Error(response.data?.error_message || response.data?.message || 'Failed to create folder');
       }
     },
-    onMutate: () => {
-      setCreating(true);
-    },
     onSuccess: () => {
-      setCreating(false);
       Alert.alert('Success', `Folder "${folderName}" created successfully!`);
       queryClient.invalidateQueries({ queryKey: ['server-files', id] });
       router.back();
     },
     onError: (error: any) => {
-      setCreating(false);
       Alert.alert('Error', error?.message || 'Failed to create folder');
     }
   });
@@ -59,15 +53,8 @@ export default function FolderCreateScreen() {
   const currentPathDisplay = path === '/' ? 'Root' : path.slice(1);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.dark.bg }}>
-      <View style={{ 
-        flexDirection: 'row', 
-        padding: 16, 
-        backgroundColor: Colors.dark.bgSecondary,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.dark.border,
-        alignItems: 'center'
-      }}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
           <ChevronLeft size={24} color={Colors.dark.primary} />
         </TouchableOpacity>
@@ -139,15 +126,10 @@ export default function FolderCreateScreen() {
         </View>
       </View>
 
-      <View style={{
-        padding: 16,
-        backgroundColor: Colors.dark.bgSecondary,
-        borderTopWidth: 1,
-        borderTopColor: Colors.dark.border
-      }}>
+      <View style={styles.footer}>
         <TouchableOpacity 
           onPress={handleCreate} 
-          disabled={creating || createMutation.isPending || !folderName.trim()}
+          disabled={createMutation.isPending || !folderName.trim()}
           style={[
             {
               backgroundColor: Colors.dark.primary,
@@ -159,13 +141,13 @@ export default function FolderCreateScreen() {
               justifyContent: 'center',
               gap: 8
             },
-            (creating || createMutation.isPending || !folderName.trim()) && { 
+            (createMutation.isPending || !folderName.trim()) && { 
               opacity: 0.6,
               backgroundColor: Colors.dark.bgTertiary 
             }
           ]}
         >
-          {creating || createMutation.isPending ? (
+          {createMutation.isPending ? (
             <>
               <ActivityIndicator size={18} color="white" />
               <Text style={{ color: 'white', fontWeight: '600' }}>Creating...</Text>
@@ -183,3 +165,24 @@ export default function FolderCreateScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.dark.bg,
+  },
+  header: {
+    flexDirection: 'row', 
+    padding: 16, 
+    backgroundColor: Colors.dark.bgSecondary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+    alignItems: 'center'
+  },
+  footer: {
+    padding: 16,
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border
+  },
+});

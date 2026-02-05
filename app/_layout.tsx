@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppProvider } from "@/contexts/AppContext";
 import { StatusBar } from "react-native";
+import Colors from '@/constants/colors';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -14,16 +15,23 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ 
       headerBackTitle: "Back",
-      headerStyle: { backgroundColor: '#0A0F14' },
-      headerTintColor: '#06B6D4',
-      headerTitleStyle: { color: '#E8EDF2' },
+      headerStyle: { 
+        backgroundColor: Colors.dark.bgSecondary,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.dark.border
+      },
+      headerTintColor: Colors.dark.primary,
+      headerTitleStyle: { 
+        color: Colors.dark.text, 
+        fontWeight: '600',
+        fontFamily: 'monospace'
+      },
     }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="errors" options={{ headerShown: false }} />
       <Stack.Screen name="instance-setup" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="server/[id]" options={{ headerTitle: "Server Management" }} />
+      <Stack.Screen name="server/[id]" options={{ headerTitle: "Server Management", headerShown: false }} />
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="activity-log" options={{ headerShown: false }} />
     </Stack>

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -16,7 +16,6 @@ export default function FileCreateScreen() {
   
   const [filename, setFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -25,7 +24,6 @@ export default function FileCreateScreen() {
       }
 
       const fullPath = path && path !== '/' ? `${path}/${filename.trim()}` : filename.trim();
-      
       const api = createApiClient(instanceUrl, authToken);
       const response = await api.post(`/api/user/servers/${id}/write-file`, fileContent || '', {
         params: { path: `/${fullPath}` }
@@ -35,17 +33,13 @@ export default function FileCreateScreen() {
         throw new Error(response.data?.error_message || response.data?.message || 'Failed to create file');
       }
     },
-    onMutate: () => {
-      setSaving(true);
-    },
+    onMutate: () => {},
     onSuccess: () => {
-      setSaving(false);
       Alert.alert('Success', `File "${filename}" created successfully!`);
       queryClient.invalidateQueries({ queryKey: ['server-files', id] });
       router.back();
     },
     onError: (error: any) => {
-      setSaving(false);
       Alert.alert('Error', error?.message || 'Failed to create file');
     }
   });
@@ -61,15 +55,8 @@ export default function FileCreateScreen() {
   const currentPathDisplay = path === '/' ? 'Root' : path.slice(1);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.dark.bg }}>
-      <View style={{ 
-        flexDirection: 'row', 
-        padding: 16, 
-        backgroundColor: Colors.dark.bgSecondary,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.dark.border,
-        alignItems: 'center'
-      }}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
           <ChevronLeft size={24} color={Colors.dark.primary} />
         </TouchableOpacity>
@@ -160,15 +147,10 @@ export default function FileCreateScreen() {
         </View>
       </View>
 
-      <View style={{
-        padding: 16,
-        backgroundColor: Colors.dark.bgSecondary,
-        borderTopWidth: 1,
-        borderTopColor: Colors.dark.border
-      }}>
+      <View style={styles.footer}>
         <TouchableOpacity 
           onPress={handleSave} 
-          disabled={saving || saveMutation.isPending || !filename.trim()}
+          disabled={saveMutation.isPending || !filename.trim()}
           style={[
             {
               backgroundColor: Colors.dark.primary,
@@ -180,13 +162,13 @@ export default function FileCreateScreen() {
               justifyContent: 'center',
               gap: 8
             },
-            (saving || saveMutation.isPending || !filename.trim()) && { 
+            (saveMutation.isPending || !filename.trim()) && { 
               opacity: 0.6,
               backgroundColor: Colors.dark.bgTertiary 
             }
           ]}
         >
-          {saving || saveMutation.isPending ? (
+          {saveMutation.isPending ? (
             <>
               <ActivityIndicator size={18} color="white" />
               <Text style={{ color: 'white', fontWeight: '600' }}>Creating...</Text>
@@ -204,3 +186,24 @@ export default function FileCreateScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.dark.bg,
+  },
+  header: {
+    flexDirection: 'row', 
+    padding: 16, 
+    backgroundColor: Colors.dark.bgSecondary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+    alignItems: 'center'
+  },
+  footer: {
+    padding: 16,
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border
+  },
+});
