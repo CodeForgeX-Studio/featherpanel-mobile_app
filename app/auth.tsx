@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { WebView } from 'react-native-webview';
 import { useApp } from '@/contexts/AppContext';
-import { checkServerStatus, redirectIfOffline } from '@/lib/statusCheck';
 import Colors from '@/constants/colors';
 import { User as UserIcon, Lock, Mail, ArrowRight, Globe, Edit2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,31 +37,11 @@ export default function AuthScreen() {
   const [lastName, setLastName] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
-  const [isChecking, setIsChecking] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
   const { login, register, isLoginLoading, isRegisterLoading, instanceUrl } = useApp();
   const router = useRouter();
-
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (!instanceUrl) {
-        setIsChecking(false);
-        return;
-      }
-
-      const isOnline = await checkServerStatus(instanceUrl);
-      if (!isOnline) {
-        redirectIfOffline(instanceUrl);
-        setIsChecking(false);
-        return;
-      }
-      setIsChecking(false);
-    };
-
-    checkStatus();
-  }, [instanceUrl]);
 
   const {
     data: settings,
@@ -78,17 +57,12 @@ export default function AuthScreen() {
       }
       return response.data.data.settings;
     },
-    enabled: !!instanceUrl && !isChecking,
+    enabled: !!instanceUrl,
     refetchInterval: 2000,
   });
 
-  if (isChecking) {
-    return null;
-  }
-
   const turnstileEnabled = settings?.turnstile_enabled === 'true';
   const turnstileKey = settings?.turnstile_key_pub;
-  const instanceDomain = instanceUrl ? new URL(instanceUrl).hostname : '';
 
   const turnstileHtml = `
     <!DOCTYPE html>
