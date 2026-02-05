@@ -38,7 +38,7 @@ export default function ServersScreen() {
 
       try {
         const api = createApiClient(instanceUrl, authToken);
-        const response = await api.get<ServersEnvelope>('/api/user/servers?view_all=true');
+        const response = await api.get<ServersEnvelope>('/api/user/servers?view_all=false');
 
         if (response.status !== 200) {
           queryClient.setQueryData(['servers', instanceUrl, authToken, version], []);

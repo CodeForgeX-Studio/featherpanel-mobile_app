@@ -1,7 +1,8 @@
-import { Stack } from "expo-router";
+import { Stack, Link } from "expo-router";
 import React from "react";
+import { TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { HeaderBackButton } from '@react-navigation/elements';
 
 export default function ServerDetailLayout() {
   return (
@@ -17,12 +18,13 @@ export default function ServerDetailLayout() {
         name="index"
         options={{
           title: "Overview",
-          headerBackVisible: true,
-          headerLeft: ({ navigation }) => (
-            <HeaderBackButton 
-              tintColor="white"
-              onPress={() => navigation.navigate('(tabs)/servers')}
-            />
+          headerBackVisible: false,
+          headerLeft: () => (
+            <Link href="../(tabs)/servers" asChild>
+              <TouchableOpacity style={{ marginLeft: 2 }}>
+                <Ionicons name="chevron-back" size={28} color="white" />
+              </TouchableOpacity>
+            </Link>
           ),
         }}
       />
