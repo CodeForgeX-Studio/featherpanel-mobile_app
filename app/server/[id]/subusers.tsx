@@ -18,11 +18,221 @@ interface Subuser {
   permissions: string[];
 }
 
+interface PermissionDisplay {
+  [key: string]: {
+    title: string;
+    description: string;
+  };
+}
+
 interface GroupedPermissions {
   [key: string]: {
     permissions: string[];
   };
 }
+
+const PERMISSION_DISPLAY: PermissionDisplay = {
+  'websocket.connect': {
+    title: 'Connect',
+    description: 'Allows a user to connect to the server console via WebSocket.'
+  },
+  'control.start': {
+    title: 'Start',
+    description: 'Allows a user to start the server if it is stopped.'
+  },
+  'control.stop': {
+    title: 'Stop',
+    description: 'Allows a user to stop a server if it is running.'
+  },
+  'control.restart': {
+    title: 'Restart',
+    description: 'Allows a user to perform a server restart. This allows them to start the server if it is offline, but not put the server in a completely stopped state.'
+  },
+  'control.console': {
+    title: 'Console',
+    description: 'Allows a user to send commands to the server instance via the console.'
+  },
+  'user.create': {
+    title: 'Create',
+    description: 'Allows a user to create new subusers for the server.'
+  },
+  'user.read': {
+    title: 'Read',
+    description: 'Allows the user to view subusers and their permissions for the server.'
+  },
+  'user.update': {
+    title: 'Update',
+    description: 'Allows a user to modify other subusers.'
+  },
+  'user.delete': {
+    title: 'Delete',
+    description: 'Allows a user to delete a subuser from the server.'
+  },
+  'file.create': {
+    title: 'Create',
+    description: 'Allows a user to create additional files and folders via the Panel or direct upload.'
+  },
+  'file.read': {
+    title: 'Read',
+    description: 'Allows a user to view the contents of a directory, but not view the contents of or download files.'
+  },
+  'file.read_content': {
+    title: 'Read Content',
+    description: 'Allows a user to view the contents of a given file. This will also allow the user to download files.'
+  },
+  'file.update': {
+    title: 'Update',
+    description: 'Allows a user to update the contents of an existing file or directory.'
+  },
+  'file.delete': {
+    title: 'Delete',
+    description: 'Allows a user to delete files or directories.'
+  },
+  'file.archive': {
+    title: 'Archive',
+    description: 'Allows a user to archive the contents of a directory as well as decompress existing archives on the system.'
+  },
+  'file.sftp': {
+    title: 'SFTP',
+    description: 'Allows a user to connect to SFTP and manage server files using the other assigned file permissions.'
+  },
+  'backup.create': {
+    title: 'Create',
+    description: 'Allows a user to create new backups for this server.'
+  },
+  'backup.read': {
+    title: 'Read',
+    description: 'Allows a user to view all backups that exist for this server.'
+  },
+  'backup.delete': {
+    title: 'Delete',
+    description: 'Allows a user to remove backups from the system.'
+  },
+  'backup.download': {
+    title: 'Download',
+    description: 'Allows a user to download a backup for the server. Danger: this allows a user to access all files for the server in the backup.'
+  },
+  'backup.restore': {
+    title: 'Restore',
+    description: 'Allows a user to restore a backup for the server. Danger: this allows the user to delete all of the server files in the process.'
+  },
+  'allocation.read': {
+    title: 'Read',
+    description: 'Allows a user to view all allocations currently assigned to this server. Users with any level of access to this server can always view the primary allocation.'
+  },
+  'allocation.create': {
+    title: 'Create',
+    description: 'Allows a user to assign additional allocations to the server.'
+  },
+  'allocation.update': {
+    title: 'Update',
+    description: 'Allows a user to change the primary server allocation and attach notes to each allocation.'
+  },
+  'allocation.delete': {
+    title: 'Delete',
+    description: 'Allows a user to delete an allocation from the server.'
+  },
+  'startup.read': {
+    title: 'Read',
+    description: 'Allows a user to view the startup parameters for a server.'
+  },
+  'startup.update': {
+    title: 'Update',
+    description: 'Allows a user to modify startup parameters for a server.'
+  },
+  'startup.docker-image': {
+    title: 'startup.docker-image',
+    description: ''
+  },
+  'template.read': {
+    title: 'Read',
+    description: 'Allows a user to view available server templates.'
+  },
+  'template.install': {
+    title: 'Install',
+    description: 'Allows a user to install templates on the server.'
+  },
+  'database.create': {
+    title: 'Create',
+    description: 'Allows a user to create new databases for this server.'
+  },
+  'database.read': {
+    title: 'Read',
+    description: 'Allows a user to view all databases that exist for this server.'
+  },
+  'database.update': {
+    title: 'Update',
+    description: 'Allows a user to view passwords for databases.'
+  },
+  'database.delete': {
+    title: 'Delete',
+    description: 'Allows a user to remove databases from the system.'
+  },
+  'database.view_password': {
+    title: 'database.view_password',
+    description: ''
+  },
+  'schedule.create': {
+    title: 'Create',
+    description: 'Allows a user to create new schedules for this server.'
+  },
+  'schedule.read': {
+    title: 'Read',
+    description: 'Allows a user to view all schedules that exist for this server.'
+  },
+  'schedule.update': {
+    title: 'Update',
+    description: 'Allows a user to modify schedules for a server.'
+  },
+  'schedule.delete': {
+    title: 'Delete',
+    description: 'Allows a user to remove schedules from the system.'
+  },
+  'settings.rename': {
+    title: 'Rename',
+    description: 'Allows a user to rename a server.'
+  },
+  'settings.change-egg': {
+    title: 'settings.change-egg',
+    description: ''
+  },
+  'reinstall': {
+    title: 'Reinstall',
+    description: 'Allows a user to trigger a server reinstallation.'
+  },
+  'activity.read': {
+    title: 'Read',
+    description: 'Allows a user to view server activity.'
+  },
+  'subdomain.manage': {
+    title: 'Manage',
+    description: 'Allows a user to create, update, delete, and sync subdomains for this server.'
+  },
+  'firewall.read': {
+    title: 'Read',
+    description: 'Allows a user to view the firewall rules for this server.'
+  },
+  'firewall.manage': {
+    title: 'Manage',
+    description: 'Allows a user to create, update, and delete firewall rules for this server.'
+  },
+  'proxy.read': {
+    title: 'Read',
+    description: 'Allows a user to view the proxy rules for this server.'
+  },
+  'proxy.manage': {
+    title: 'Manage',
+    description: 'Allows a user to create, update, and delete proxy rules for this server.'
+  },
+  'import.read': {
+    title: 'Read',
+    description: 'Allows a user to view server imports.'
+  },
+  'import.manage': {
+    title: 'Manage',
+    description: 'Allows a user to create and manage server imports.'
+  },
+};
 
 export default function ServerSubusersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -237,6 +447,10 @@ export default function ServerSubusersScreen() {
   const subusers: Subuser[] = response?.data?.data || [];
   const groupedPermissions: GroupedPermissions = permissionsResponse?.data?.grouped_permissions || {};
 
+  const getPermissionDisplay = (permission: string) => {
+    return PERMISSION_DISPLAY[permission as keyof PermissionDisplay] || { title: permission, description: '' };
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
@@ -416,20 +630,30 @@ export default function ServerSubusersScreen() {
                       </Text>
                     </TouchableOpacity>
 
-                    {group.permissions.map((permission) => (
-                      <TouchableOpacity
-                        key={permission}
-                        style={styles.permissionItem}
-                        onPress={() => togglePermission(permission)}
-                      >
-                        {selectedPermissions.includes(permission) ? (
-                          <CheckSquare size={18} color={Colors.dark.primary} />
-                        ) : (
-                          <Square size={18} color={Colors.dark.textMuted} />
-                        )}
-                        <Text style={styles.permissionName}>{permission}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {group.permissions.map((permission) => {
+                      const display = getPermissionDisplay(permission);
+                      return (
+                        <TouchableOpacity
+                          key={permission}
+                          style={styles.permissionItem}
+                          onPress={() => togglePermission(permission)}
+                        >
+                          {selectedPermissions.includes(permission) ? (
+                            <CheckSquare size={18} color={Colors.dark.primary} />
+                          ) : (
+                            <Square size={18} color={Colors.dark.textMuted} />
+                          )}
+                          <View style={styles.permissionContent}>
+                            <Text style={styles.permissionTitle} numberOfLines={1}>{display.title}</Text>
+                            {display.description ? (
+                              <Text style={styles.permissionDescription} numberOfLines={2}>
+                                {display.description}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 );
               })}
@@ -549,7 +773,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -558,6 +781,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   editButton: {
+    flex: 1,
     backgroundColor: Colors.dark.primary,
   },
   deleteButton: {
@@ -685,7 +909,7 @@ const styles = StyleSheet.create({
   },
   permissionItem: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    alignItems: 'flex-start' as const,
     gap: 12,
     padding: 12,
     backgroundColor: Colors.dark.bg,
@@ -693,10 +917,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     marginLeft: 16,
   },
-  permissionName: {
-    fontSize: 13,
+  permissionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  permissionTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.dark.text,
     fontFamily: 'monospace',
+  },
+  permissionDescription: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    lineHeight: 16,
   },
   modalFooter: {
     flexDirection: 'row' as const,
