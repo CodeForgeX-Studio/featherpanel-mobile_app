@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
-import { Database, Plus, Trash2, Eye, EyeOff, RefreshCw } from 'lucide-react-native';
+import { createApiClient } from '@/lib/api';
+import { Database, Plus, Trash2, Eye, EyeOff, RefreshCw, X } from 'lucide-react-native';
 
 interface ServerDatabase {
   id: number;
@@ -16,31 +17,145 @@ interface ServerDatabase {
   database_port: number;
   remote: string;
   max_connections: number;
+  database_type?: string;
+  database_host_name?: string;
+}
+
+interface DatabaseHost {
+  id: number;
+  name: string;
+  database_type: string;
+  database_port: number;
+  database_host: string;
 }
 
 export default function ServerDatabasesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { apiClient } = useApp();
+  const { instanceUrl, authToken } = useApp();
   const queryClient = useQueryClient();
   const [showPasswords, setShowPasswords] = useState<{ [key: number]: boolean }>({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [databaseName, setDatabaseName] = useState('');
+  const [remote, setRemote] = useState('%');
+  const [maxConnections, setMaxConnections] = useState('0');
+  const [selectedHostId, setSelectedHostId] = useState<number | null>(null);
 
-  const { data: response, isLoading, error, refetch } = useQuery({
-    queryKey: ['server-databases', id],
+  const { data: serverResponse } = useQuery({
+    queryKey: ['server', id, instanceUrl, authToken],
     queryFn: async () => {
-      if (!apiClient) throw new Error('API client not initialized');
-      const res = await apiClient.get(`/api/user/servers/${id}/databases`);
-      return res.data;
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch server';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    enabled: !!apiClient && !!id,
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    staleTime: 0,
+  });
+
+  const { data: hostsResponse } = useQuery({
+    queryKey: ['database-hosts', id, instanceUrl, authToken],
+    queryFn: async () => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/databases/hosts`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch database hosts';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    staleTime: 0,
+  });
+
+  const { data: response, isLoading, error } = useQuery({
+    queryKey: ['server-databases', id, instanceUrl, authToken],
+    queryFn: async () => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.get(`/api/user/servers/${id}/databases`, {
+        params: { page: 1, per_page: 20 }
+      });
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to fetch databases';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    enabled: !!instanceUrl && !!authToken && !!id,
+    retry: false,
+    refetchInterval: 1000,
+    staleTime: 0,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { database_host_id: number; database_name: string; remote: string; max_connections: number }) => {
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.post(`/api/user/servers/${id}/databases`, data);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to create database';
+        throw new Error(message);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['server-databases', id] });
+      setShowCreateModal(false);
+      setDatabaseName('');
+      setRemote('%');
+      setMaxConnections('0');
+      setSelectedHostId(null);
+      Alert.alert('Success', data.data?.message || 'Database created successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to create database');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (databaseId: number) => {
-      if (!apiClient) throw new Error('API client not initialized');
-      await apiClient.delete(`/api/user/servers/${id}/databases/${databaseId}`);
+      if (!instanceUrl || !authToken || !id) {
+        throw new Error('Missing instanceUrl, authToken or server ID');
+      }
+      const api = createApiClient(instanceUrl, authToken);
+      const response = await api.delete(`/api/user/servers/${id}/databases/${databaseId}`);
+      
+      if (response.status !== 200) {
+        const message = response.data?.error_message || response.data?.message || 'Failed to delete database';
+        throw new Error(message);
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['server-databases', id] });
+      Alert.alert('Success', data.data?.message || 'Database deleted successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Failed to delete database');
     },
   });
 
@@ -59,25 +174,51 @@ export default function ServerDatabasesScreen() {
     );
   };
 
+  const handleCreate = () => {
+    if (!databaseName.trim()) {
+      Alert.alert('Error', 'Please enter a database name');
+      return;
+    }
+    if (!selectedHostId) {
+      Alert.alert('Error', 'Please select a database host');
+      return;
+    }
+
+    createMutation.mutate({
+      database_host_id: selectedHostId,
+      database_name: databaseName.trim(),
+      remote: remote.trim() || '%',
+      max_connections: parseInt(maxConnections) || 0,
+    });
+  };
+
   const togglePasswordVisibility = (id: number) => {
     setShowPasswords(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const databases: ServerDatabase[] = response?.data || [];
+  useEffect(() => {
+    if (hostsResponse?.data && Array.isArray(hostsResponse.data) && hostsResponse.data.length > 0 && !selectedHostId) {
+      setSelectedHostId(hostsResponse.data[0].id);
+    }
+  }, [hostsResponse, selectedHostId]);
+
+  const databases: ServerDatabase[] = response?.data?.data || [];
+  const databaseLimit = serverResponse?.data?.database_limit || 0;
+  const hosts: DatabaseHost[] = hostsResponse?.data || [];
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Text style={styles.headerCount}>{databases.length} Database{databases.length !== 1 ? 's' : ''}</Text>
-          <Text style={styles.headerLimit}>Limit: {response?.server?.database_limit || 0}</Text>
+          <Text style={styles.headerLimit}>Limit: {databaseLimit}</Text>
         </View>
         <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={() => refetch()}
-          disabled={isLoading}
+          style={styles.createButton}
+          onPress={() => setShowCreateModal(true)}
+          disabled={databases.length >= databaseLimit}
         >
-          <RefreshCw size={20} color={Colors.dark.primary} />
+          <Plus size={20} color={databases.length >= databaseLimit ? Colors.dark.textMuted : Colors.dark.primary} />
         </TouchableOpacity>
       </View>
 
@@ -112,6 +253,18 @@ export default function ServerDatabasesScreen() {
                   <Text style={styles.infoLabel}>Host:</Text>
                   <Text style={styles.infoValue}>{item.database_host}:{item.database_port}</Text>
                 </View>
+                {item.database_host_name && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Host Name:</Text>
+                    <Text style={styles.infoValue}>{item.database_host_name}</Text>
+                  </View>
+                )}
+                {item.database_type && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Type:</Text>
+                    <Text style={styles.infoValue}>{item.database_type}</Text>
+                  </View>
+                )}
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Username:</Text>
                   <Text style={styles.infoValue}>{item.username}</Text>
@@ -148,13 +301,109 @@ export default function ServerDatabasesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Database size={48} color={Colors.dark.textMuted} />
-              <Text style={styles.emptyText}>No databases yet</Text>
+              <Text style={styles.emptyText}>No databases found</Text>
               <Text style={styles.emptySubtext}>Create your first database to get started</Text>
             </View>
           }
           contentContainerStyle={styles.listContent}
         />
       )}
+
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Database</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <X size={24} color={Colors.dark.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Database Host</Text>
+              {hosts.length === 0 ? (
+                <Text style={styles.noHostsText}>No database hosts available</Text>
+              ) : (
+                <View style={styles.hostsContainer}>
+                  {hosts.map((host) => (
+                    <TouchableOpacity
+                      key={host.id}
+                      style={[
+                        styles.hostOption,
+                        selectedHostId === host.id && styles.hostOptionSelected
+                      ]}
+                      onPress={() => setSelectedHostId(host.id)}
+                    >
+                      <View style={styles.hostOptionContent}>
+                        <Text style={styles.hostOptionName}>{host.name}</Text>
+                        <Text style={styles.hostOptionDetails}>
+                          {host.database_type} - {host.database_host}:{host.database_port}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>Database Name</Text>
+              <Text style={styles.inputDescription}>The name of the database to create</Text>
+              <TextInput
+                style={styles.input}
+                value={databaseName}
+                onChangeText={setDatabaseName}
+                placeholder="Enter database name"
+                placeholderTextColor={Colors.dark.textMuted}
+              />
+
+              <Text style={styles.inputLabel}>Remote Access</Text>
+              <Text style={styles.inputDescription}>Host pattern for remote access (e.g., % for any host)</Text>
+              <TextInput
+                style={styles.input}
+                value={remote}
+                onChangeText={setRemote}
+                placeholder="%"
+                placeholderTextColor={Colors.dark.textMuted}
+              />
+
+              <Text style={styles.inputLabel}>Max Connections</Text>
+              <Text style={styles.inputDescription}>Maximum number of concurrent connections (0 for unlimited)</Text>
+              <TextInput
+                style={styles.input}
+                value={maxConnections}
+                onChangeText={setMaxConnections}
+                placeholder="0"
+                placeholderTextColor={Colors.dark.textMuted}
+                keyboardType="numeric"
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleCreate}
+                disabled={createMutation.isPending || hosts.length === 0}
+              >
+                {createMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -186,7 +435,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
-  refreshButton: {
+  createButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
@@ -272,5 +521,119 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textMuted,
     textAlign: 'center' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end' as const,
+  },
+  modalContent: {
+    backgroundColor: Colors.dark.bgSecondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  inputDescription: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginBottom: 8,
+    marginTop: -4,
+  },
+  input: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: Colors.dark.text,
+  },
+  hostsContainer: {
+    gap: 8,
+  },
+  hostOption: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    borderRadius: 8,
+    padding: 12,
+  },
+  hostOptionSelected: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + '20',
+  },
+  hostOptionContent: {
+    gap: 4,
+  },
+  hostOptionName: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  hostOptionDetails: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    fontFamily: 'monospace',
+  },
+  noHostsText: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
+    textAlign: 'center' as const,
+    padding: 20,
+  },
+  modalFooter: {
+    flexDirection: 'row' as const,
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.dark.bg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  modalButtonCreate: {
+    backgroundColor: Colors.dark.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
   },
 });
