@@ -1,50 +1,238 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Lock, Loader, Terminal, Send, Trash2 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { useApp } from '@/contexts/AppContext';
+import { websocketConsoleClient } from '@/lib/websockets/console';
 
 export default function ServerConsoleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { instanceUrl, authToken } = useApp();
   const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+  const [lines, setLines] = useState<string[]>([]);
+  const [input, setInput] = useState<string>('');
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const bufferRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!id || !instanceUrl || !authToken) {
+      setIsInitializing(false);
+      return;
+    }
+
+    websocketConsoleClient.setConfig(instanceUrl, authToken);
+    websocketConsoleClient.setServerUuid(id as string);
+    
+    websocketConsoleClient.onOutput = (data) => {
+      bufferRef.current += data;
+      
+      const newLines: string[] = [];
+      let remaining = bufferRef.current;
+      
+      while (remaining.length > 0) {
+        const newlineIndex = remaining.indexOf('\n');
+        const daemonIndex = remaining.indexOf('[FeatherPanel Daemon]:', 1);
+        
+        if (newlineIndex === -1 && daemonIndex === -1) {
+          break;
+        }
+        
+        let splitIndex = -1;
+        if (newlineIndex !== -1 && (daemonIndex === -1 || newlineIndex < daemonIndex)) {
+          splitIndex = newlineIndex;
+          newLines.push(remaining.substring(0, splitIndex));
+          remaining = remaining.substring(splitIndex + 1);
+        } else if (daemonIndex !== -1) {
+          splitIndex = daemonIndex;
+          if (splitIndex > 0) {
+            newLines.push(remaining.substring(0, splitIndex));
+          }
+          remaining = remaining.substring(splitIndex);
+          
+          const nextNewline = remaining.indexOf('\n');
+          const nextDaemon = remaining.indexOf('[FeatherPanel Daemon]:', 1);
+          
+          if (nextNewline === -1 && nextDaemon === -1) {
+            break;
+          }
+        }
+      }
+      
+      bufferRef.current = remaining;
+      
+      if (newLines.length > 0) {
+        setLines(prev => [...prev, ...newLines]);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 100);
+      }
+    };
+
+    websocketConsoleClient.onConnectionChange = (connected) => {
+      setIsConnected(connected);
+    };
+
+    websocketConsoleClient.start();
+    setIsInitializing(false);
+
+    return () => {
+      websocketConsoleClient.stop();
+      bufferRef.current = '';
+    };
+  }, [id, instanceUrl, authToken]);
+
+  const sendCommand = useCallback(() => {
+    if (!input.trim() || !isConnected) {
+      return;
+    }
+    websocketConsoleClient.sendCommand(input);
+    setInput('');
+    inputRef.current?.focus();
+  }, [input, isConnected]);
+
+  const handleSubmit = useCallback((e?: any) => {
+    e?.preventDefault?.();
+    sendCommand();
+  }, [sendCommand]);
+
+  const clearConsole = useCallback(() => {
+    setLines([]);
+    bufferRef.current = '';
+  }, []);
+
+  const renderLine = (line: string, index: number) => {
+    if (!line.trim()) return null;
+
+    const parts: JSX.Element[] = [];
+    let remaining = line;
+    let key = 0;
+
+    while (remaining.length > 0) {
+      const daemonMatch = remaining.match(/\[FeatherPanel Daemon\]:/);
+      
+      if (daemonMatch && daemonMatch.index !== undefined) {
+        if (daemonMatch.index > 0) {
+          parts.push(
+            <Text key={`${index}-${key++}`} style={styles.outputText}>
+              {remaining.substring(0, daemonMatch.index)}
+            </Text>
+          );
+        }
+        
+        parts.push(
+          <Text key={`${index}-${key++}`} style={styles.daemonText}>
+            [FeatherPanel Daemon]:
+          </Text>
+        );
+        
+        remaining = remaining.substring(daemonMatch.index + daemonMatch[0].length);
+      } else {
+        parts.push(
+          <Text key={`${index}-${key++}`} style={styles.outputText}>
+            {remaining}
+          </Text>
+        );
+        break;
+      }
+    }
+
+    return (
+      <View key={index} style={styles.lineWrapper}>
+        <Text style={styles.outputLine}>{parts}</Text>
+      </View>
+    );
+  };
+
+  const isReady = !!instanceUrl && !!authToken && !!id;
+  const isDisabled = !isConnected || !isReady;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <Text style={styles.lockedText}>🔒 Console Locked</Text>
+        <View style={styles.headerLeft}>
+          {!isReady ? (
+            <View style={styles.headerContent}>
+              <Lock size={16} color={Colors.dark.warning} />
+              <Text style={styles.notReadyText}>Not authenticated</Text>
+            </View>
+          ) : isInitializing ? (
+            <ActivityIndicator color={Colors.dark.primary} />
+          ) : isConnected ? (
+            <View style={styles.headerContent}>
+              <View style={styles.connectedDot} />
+              <Text style={styles.connectedText}>Connected</Text>
+            </View>
+          ) : (
+            <View style={styles.headerContent}>
+              <Loader size={16} color={Colors.dark.warning} />
+              <Text style={styles.disconnectedText}>Connecting...</Text>
+            </View>
+          )}
+        </View>
+        {lines.length > 0 && (
+          <TouchableOpacity onPress={clearConsole} style={styles.clearButton}>
+            <Trash2 size={18} color={Colors.dark.danger} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.consoleContainer}>
         <ScrollView
           ref={scrollViewRef}
           style={styles.logsScroll}
-          contentContainerStyle={styles.comingSoonContent}
+          contentContainerStyle={styles.logsContent}
         >
-          <View style={styles.comingSoonContainer}>
-            <Text style={styles.comingSoonTitle}>Coming Soon</Text>
-            <Text style={styles.comingSoonDescription}>
-              The server console has been postponed to ensure we deliver the best possible console experience in our next version.
-            </Text>
-            <Text style={styles.comingSoonDescription}>
-              We're working hard to create a robust, feature-complete terminal interface with full command history, syntax highlighting, and real-time streaming.
-            </Text>
-          </View>
+          {lines.length > 0 ? (
+            <View>{lines.map((line, index) => renderLine(line, index))}</View>
+          ) : (
+            <View style={styles.emptyState}>
+              {!isReady ? (
+                <>
+                  <Lock size={48} color={Colors.dark.textMuted} />
+                  <Text style={styles.emptyTitle}>Login Required</Text>
+                  <Text style={styles.emptyDescription}>Please login to access the console</Text>
+                </>
+              ) : !isConnected ? (
+                <>
+                  <Loader size={48} color={Colors.dark.textMuted} />
+                  <Text style={styles.emptyTitle}>Connecting...</Text>
+                  <Text style={styles.emptyDescription}>Establishing connection to server console</Text>
+                </>
+              ) : (
+                <>
+                  <Terminal size={48} color={Colors.dark.textMuted} />
+                  <Text style={styles.emptyTitle}>Console Empty</Text>
+                  <Text style={styles.emptyDescription}>No output yet. Start your server for the best experience.</Text>
+                  <Text style={styles.emptyHint}>Commands will appear here once the server is running</Text>
+                </>
+              )}
+            </View>
+          )}
         </ScrollView>
       </View>
 
       <View style={styles.inputContainer}>
         <TextInput
-          style={[styles.input, styles.inputLocked]}
-          value="Console Locked"
-          editable={false}
-          pointerEvents="none"
+          ref={inputRef}
+          style={[styles.input, isDisabled && styles.inputDisabled]}
+          value={input}
+          onChangeText={setInput}
+          onSubmitEditing={handleSubmit}
+          placeholder={isReady ? (isConnected ? "Enter command..." : "Connecting...") : "Login required"}
           placeholderTextColor={Colors.dark.textMuted}
+          editable={!isDisabled}
+          returnKeyType="send"
         />
         <TouchableOpacity
-          style={[styles.sendButton, styles.sendButtonDisabled]}
-          disabled={true}
+          style={[styles.sendButton, (isDisabled || !input.trim()) && styles.sendButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={isDisabled || !input.trim()}
         >
-          <Text style={styles.lockedButtonText}>LOCKED</Text>
+          <Send size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -57,15 +245,44 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.bg,
   },
   header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     paddingBottom: 8,
   },
-  lockedText: {
+  headerLeft: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clearButton: {
+    padding: 8,
+  },
+  connectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00FF00',
+  },
+  notReadyText: {
     fontSize: 16,
-    color: Colors.dark.danger,
-    fontWeight: '700' as const,
+    color: Colors.dark.warning,
+    fontWeight: '700',
+  },
+  connectedText: {
+    fontSize: 16,
+    color: '#00FF00',
+    fontWeight: '700',
+  },
+  disconnectedText: {
+    fontSize: 16,
+    color: Colors.dark.warning,
+    fontWeight: '700',
   },
   consoleContainer: {
     flex: 1,
@@ -80,31 +297,60 @@ const styles = StyleSheet.create({
   logsScroll: {
     flex: 1,
   },
-  comingSoonContent: {
+  logsContent: {
+    padding: 12,
     flexGrow: 1,
-    padding: 40,
+  },
+  lineWrapper: {
+    marginBottom: 4,
+  },
+  outputLine: {
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 20,
+  },
+  outputText: {
+    fontSize: 14,
+    color: '#FFF',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  daemonText: {
+    fontSize: 14,
+    color: '#FFD700',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+  },
+  emptyState: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 40,
   },
-  comingSoonContainer: {
-    alignItems: 'center',
-    gap: 16,
-  },
-  comingSoonTitle: {
-    fontSize: 24,
-    color: '#0F0',
+  emptyTitle: {
+    fontSize: 20,
+    color: Colors.dark.text,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontWeight: '700' as const,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  comingSoonDescription: {
+  emptyDescription: {
     fontSize: 14,
-    color: '#0F0',
+    color: Colors.dark.text,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     textAlign: 'center',
     lineHeight: 20,
   },
+  emptyHint: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 8,
+  },
   inputContainer: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     padding: 16,
     backgroundColor: Colors.dark.bgSecondary,
     borderTopWidth: 1,
@@ -118,12 +364,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#0F0',
+    color: '#FFF',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  inputLocked: {
+  inputDisabled: {
     color: Colors.dark.textMuted,
     backgroundColor: Colors.dark.bgSecondary,
     borderColor: Colors.dark.danger,
@@ -133,17 +379,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonDisabled: {
     backgroundColor: Colors.dark.danger,
     opacity: 0.6,
-  },
-  lockedButtonText: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '700' as const,
-    textTransform: 'uppercase' as const,
   },
 });
