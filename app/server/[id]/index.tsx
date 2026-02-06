@@ -129,22 +129,10 @@ export default function ServerOverviewScreen() {
       description: 'Ports and allocations',
     },
     {
-      title: 'Schedules',
-      icon: Calendar,
-      route: `/server/${id}/schedules`,
-      description: 'Task automation',
-    },
-    {
       title: 'Subusers',
       icon: Users,
       route: `/server/${id}/subusers`,
       description: 'Access management',
-    },
-    {
-      title: 'Settings',
-      icon: Settings,
-      route: `/server/${id}/settings`,
-      description: 'Server settings',
     },
   ];
 

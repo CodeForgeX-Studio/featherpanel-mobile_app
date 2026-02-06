@@ -65,21 +65,9 @@ export default function ServerDetailLayout() {
         }}
       />
       <Stack.Screen
-        name="schedules"
-        options={{
-          title: "Schedules",
-        }}
-      />
-      <Stack.Screen
         name="subusers"
         options={{
           title: "Subusers",
-        }}
-      />
-      <Stack.Screen
-        name="settings"
-        options={{
-          title: "Settings",
         }}
       />
     </Stack>
