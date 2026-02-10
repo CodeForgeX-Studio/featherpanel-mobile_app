@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { createApiClient } from '@/lib/api';
-import { Database, Plus, Trash2, Eye, EyeOff, RefreshCw, X } from 'lucide-react-native';
+import { Database, Plus, Trash2, Eye, EyeOff, X } from 'lucide-react-native';
 
 interface ServerDatabase {
   id: number;
@@ -311,98 +311,116 @@ export default function ServerDatabasesScreen() {
 
       <Modal
         visible={showCreateModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Database</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <X size={24} color={Colors.dark.text} />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowCreateModal(false)}
+          />
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Create Database</Text>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                  <X size={24} color={Colors.dark.text} />
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={styles.inputLabel}>Database Host</Text>
-              {hosts.length === 0 ? (
-                <Text style={styles.noHostsText}>No database hosts available</Text>
-              ) : (
-                <View style={styles.hostsContainer}>
-                  {hosts.map((host) => (
-                    <TouchableOpacity
-                      key={host.id}
-                      style={[
-                        styles.hostOption,
-                        selectedHostId === host.id && styles.hostOptionSelected
-                      ]}
-                      onPress={() => setSelectedHostId(host.id)}
-                    >
-                      <View style={styles.hostOptionContent}>
-                        <Text style={styles.hostOptionName}>{host.name}</Text>
-                        <Text style={styles.hostOptionDetails}>
-                          {host.database_type} - {host.database_host}:{host.database_port}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              <Text style={styles.inputLabel}>Database Name</Text>
-              <Text style={styles.inputDescription}>The name of the database to create</Text>
-              <TextInput
-                style={styles.input}
-                value={databaseName}
-                onChangeText={setDatabaseName}
-                placeholder="Enter database name"
-                placeholderTextColor={Colors.dark.textMuted}
-              />
-
-              <Text style={styles.inputLabel}>Remote Access</Text>
-              <Text style={styles.inputDescription}>Host pattern for remote access (e.g., % for any host)</Text>
-              <TextInput
-                style={styles.input}
-                value={remote}
-                onChangeText={setRemote}
-                placeholder="%"
-                placeholderTextColor={Colors.dark.textMuted}
-              />
-
-              <Text style={styles.inputLabel}>Max Connections</Text>
-              <Text style={styles.inputDescription}>Maximum number of concurrent connections (0 for unlimited)</Text>
-              <TextInput
-                style={styles.input}
-                value={maxConnections}
-                onChangeText={setMaxConnections}
-                placeholder="0"
-                placeholderTextColor={Colors.dark.textMuted}
-                keyboardType="numeric"
-              />
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowCreateModal(false)}
+              <ScrollView 
+                style={styles.modalBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCreate]}
-                onPress={handleCreate}
-                disabled={createMutation.isPending || hosts.length === 0}
-              >
-                {createMutation.isPending ? (
-                  <ActivityIndicator size="small" color={Colors.dark.text} />
+                <Text style={styles.inputLabel}>Database Host</Text>
+                {hosts.length === 0 ? (
+                  <Text style={styles.noHostsText}>No database hosts available</Text>
                 ) : (
-                  <Text style={styles.modalButtonText}>Create</Text>
+                  <View style={styles.hostsContainer}>
+                    {hosts.map((host) => (
+                      <TouchableOpacity
+                        key={host.id}
+                        style={[
+                          styles.hostOption,
+                          selectedHostId === host.id && styles.hostOptionSelected
+                        ]}
+                        onPress={() => setSelectedHostId(host.id)}
+                      >
+                        <View style={styles.hostOptionContent}>
+                          <Text style={styles.hostOptionName}>{host.name}</Text>
+                          <Text style={styles.hostOptionDetails}>
+                            {host.database_type} - {host.database_host}:{host.database_port}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 )}
-              </TouchableOpacity>
+
+                <Text style={styles.inputLabel}>Database Name</Text>
+                <Text style={styles.inputDescription}>The name of the database to create</Text>
+                <TextInput
+                  style={styles.input}
+                  value={databaseName}
+                  onChangeText={setDatabaseName}
+                  placeholder="Enter database name"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.inputLabel}>Remote Access</Text>
+                <Text style={styles.inputDescription}>Host pattern for remote access (e.g., % for any host)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={remote}
+                  onChangeText={setRemote}
+                  placeholder="%"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.inputLabel}>Max Connections</Text>
+                <Text style={styles.inputDescription}>Maximum number of concurrent connections (0 for unlimited)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxConnections}
+                  onChangeText={setMaxConnections}
+                  placeholder="0"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  keyboardType="numeric"
+                />
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setShowCreateModal(false)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCreate]}
+                  onPress={handleCreate}
+                  disabled={createMutation.isPending || hosts.length === 0}
+                >
+                  {createMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.text} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Create</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -414,9 +432,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.bg,
   },
   header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: Colors.dark.bgSecondary,
     borderBottomWidth: 1,
@@ -427,7 +445,7 @@ const styles = StyleSheet.create({
   },
   headerCount: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -440,15 +458,15 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 8,
     backgroundColor: Colors.dark.bg,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
   centerContainer: {
     flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     color: Colors.dark.danger,
@@ -466,15 +484,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
   },
   databaseHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
     gap: 12,
   },
   databaseName: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   deleteButton: {
@@ -484,14 +502,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   infoRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   infoLabel: {
     fontSize: 13,
     color: Colors.dark.textMuted,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   infoValue: {
     fontSize: 13,
@@ -499,59 +517,73 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   passwordRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   eyeButton: {
     padding: 4,
   },
   emptyContainer: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 40,
     gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   emptySubtext: {
     fontSize: 14,
     color: Colors.dark.textMuted,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end' as const,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
   },
   modalContent: {
     backgroundColor: Colors.dark.bgSecondary,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   modalHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.dark.border,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   modalBody: {
     padding: 20,
+    maxHeight: 400,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 8,
     marginTop: 16,
@@ -590,7 +622,7 @@ const styles = StyleSheet.create({
   },
   hostOptionName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   hostOptionDetails: {
@@ -601,11 +633,11 @@ const styles = StyleSheet.create({
   noHostsText: {
     fontSize: 14,
     color: Colors.dark.textMuted,
-    textAlign: 'center' as const,
+    textAlign: 'center',
     padding: 20,
   },
   modalFooter: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     padding: 20,
     gap: 12,
     borderTopWidth: 1,
@@ -615,8 +647,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalButtonCancel: {
     backgroundColor: Colors.dark.bg,
@@ -628,12 +660,12 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   modalButtonTextCancel: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.textMuted,
   },
 });

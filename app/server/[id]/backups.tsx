@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView, Switch, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView, Switch, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -419,119 +419,144 @@ export default function ServerBackupsScreen() {
 
       <Modal
         visible={showCreateModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Backup</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <X size={24} color={Colors.dark.text} />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowCreateModal(false)}
+          />
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Create Backup</Text>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                  <X size={24} color={Colors.dark.text} />
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={styles.inputLabel}>Backup Name</Text>
-              <Text style={styles.inputDescription}>A unique name for this backup</Text>
-              <TextInput
-                style={styles.input}
-                value={backupName}
-                onChangeText={setBackupName}
-                placeholder="backup-2026-02-05"
-                placeholderTextColor={Colors.dark.textMuted}
-              />
-
-              <Text style={styles.inputLabel}>Ignored Files (Optional)</Text>
-              <Text style={styles.inputDescription}>Comma-separated list of files or directories to exclude</Text>
-              <TextInput
-                style={styles.input}
-                value={ignoredFiles}
-                onChangeText={setIgnoredFiles}
-                placeholder="e.g., logs, temp, cache"
-                placeholderTextColor={Colors.dark.textMuted}
-                multiline
-              />
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowCreateModal(false)}
+              <ScrollView 
+                style={styles.modalBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCreate]}
-                onPress={handleCreate}
-                disabled={createMutation.isPending}
-              >
-                {createMutation.isPending ? (
-                  <ActivityIndicator size="small" color={Colors.dark.text} />
-                ) : (
-                  <Text style={styles.modalButtonText}>Create</Text>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.inputLabel}>Backup Name</Text>
+                <Text style={styles.inputDescription}>A unique name for this backup</Text>
+                <TextInput
+                  style={styles.input}
+                  value={backupName}
+                  onChangeText={setBackupName}
+                  placeholder="backup-2026-02-05"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.inputLabel}>Ignored Files (Optional)</Text>
+                <Text style={styles.inputDescription}>Comma-separated list of files or directories to exclude</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={ignoredFiles}
+                  onChangeText={setIgnoredFiles}
+                  placeholder="e.g., logs, temp, cache"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setShowCreateModal(false)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCreate]}
+                  onPress={handleCreate}
+                  disabled={createMutation.isPending}
+                >
+                  {createMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.text} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Create</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
         visible={showRestoreModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowRestoreModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Restore Backup</Text>
-              <TouchableOpacity onPress={() => setShowRestoreModal(false)}>
-                <X size={24} color={Colors.dark.text} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalBody}>
-              <Text style={styles.restoreWarning}>
-                Are you sure you want to restore {selectedBackup?.name}?
-              </Text>
-
-              <View style={styles.switchContainer}>
-                <View style={styles.switchInfo}>
-                  <Text style={styles.switchLabel}>Truncate Directory</Text>
-                  <Text style={styles.switchDescription}>
-                    Delete all files before restoring backup
-                  </Text>
-                </View>
-                <Switch
-                  value={truncateDirectory}
-                  onValueChange={setTruncateDirectory}
-                  trackColor={{ false: Colors.dark.border, true: Colors.dark.primary + '80' }}
-                  thumbColor={truncateDirectory ? Colors.dark.primary : Colors.dark.textMuted}
-                />
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowRestoreModal(false)}
+          />
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Restore Backup</Text>
+                <TouchableOpacity onPress={() => setShowRestoreModal(false)}>
+                  <X size={24} color={Colors.dark.text} />
+                </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowRestoreModal(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCreate]}
-                onPress={handleConfirmRestore}
-                disabled={restoreMutation.isPending}
-              >
-                {restoreMutation.isPending ? (
-                  <ActivityIndicator size="small" color={Colors.dark.text} />
-                ) : (
-                  <Text style={styles.modalButtonText}>Restore</Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalBody}>
+                <Text style={styles.restoreWarning}>
+                  Are you sure you want to restore {selectedBackup?.name}?
+                </Text>
+
+                <View style={styles.switchContainer}>
+                  <View style={styles.switchInfo}>
+                    <Text style={styles.switchLabel}>Truncate Directory</Text>
+                    <Text style={styles.switchDescription}>
+                      Delete all files before restoring backup
+                    </Text>
+                  </View>
+                  <Switch
+                    value={truncateDirectory}
+                    onValueChange={setTruncateDirectory}
+                    trackColor={{ false: Colors.dark.border, true: Colors.dark.primary + '80' }}
+                    thumbColor={truncateDirectory ? Colors.dark.primary : Colors.dark.textMuted}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setShowRestoreModal(false)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCreate]}
+                  onPress={handleConfirmRestore}
+                  disabled={restoreMutation.isPending}
+                >
+                  {restoreMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.text} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Restore</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -546,9 +571,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.bg,
   },
   header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: Colors.dark.bgSecondary,
     borderBottomWidth: 1,
@@ -559,7 +584,7 @@ const styles = StyleSheet.create({
   },
   headerCount: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -572,15 +597,15 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 8,
     backgroundColor: Colors.dark.bg,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
   centerContainer: {
     flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     color: Colors.dark.danger,
@@ -601,14 +626,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
   },
   backupHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   backupHeaderLeft: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
     flex: 1,
   },
@@ -617,7 +642,7 @@ const styles = StyleSheet.create({
   },
   backupName: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -630,24 +655,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   infoRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   infoLabel: {
     fontSize: 13,
     color: Colors.dark.textMuted,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   infoValue: {
     fontSize: 13,
     color: Colors.dark.text,
     fontFamily: 'monospace',
     flex: 1,
-    textAlign: 'right' as const,
+    textAlign: 'right',
   },
   backupActions: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     gap: 8,
     paddingTop: 12,
     borderTopWidth: 1,
@@ -658,8 +683,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     backgroundColor: Colors.dark.bg,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
@@ -667,51 +692,65 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   emptyContainer: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 40,
     gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   emptySubtext: {
     fontSize: 14,
     color: Colors.dark.textMuted,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end' as const,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
   },
   modalContent: {
     backgroundColor: Colors.dark.bgSecondary,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   modalHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.dark.border,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   modalBody: {
     padding: 20,
+    maxHeight: 400,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 8,
     marginTop: 16,
@@ -731,15 +770,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.text,
   },
+  textArea: {
+    minHeight: 80,
+  },
   restoreWarning: {
     fontSize: 14,
     color: Colors.dark.text,
     marginBottom: 20,
   },
   switchContainer: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: Colors.dark.bg,
     borderRadius: 8,
     padding: 16,
@@ -752,7 +794,7 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -761,7 +803,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
   },
   modalFooter: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     padding: 20,
     gap: 12,
     borderTopWidth: 1,
@@ -771,8 +813,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalButtonCancel: {
     backgroundColor: Colors.dark.bg,
@@ -784,12 +826,12 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   modalButtonTextCancel: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.textMuted,
   },
 });

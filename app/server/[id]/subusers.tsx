@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { createApiClient } from '@/lib/api';
-import { Users, Mail, RefreshCw, Plus, Trash2, X, Edit, CheckSquare, Square } from 'lucide-react-native';
+import { Users, Mail, Plus, Trash2, X, Edit, CheckSquare, Square } from 'lucide-react-native';
 
 interface Subuser {
   id: number;
@@ -527,156 +527,178 @@ export default function ServerSubusersScreen() {
 
       <Modal
         visible={showCreateModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Subuser</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <X size={24} color={Colors.dark.text} />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowCreateModal(false)}
+          />
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Subuser</Text>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                  <X size={24} color={Colors.dark.text} />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.modalBody}>
-              <Text style={styles.inputLabel}>Email Address</Text>
-              <Text style={styles.inputDescription}>Enter the email of an existing user</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="user@example.com"
-                placeholderTextColor={Colors.dark.textMuted}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.inputLabel}>Email Address</Text>
+                <Text style={styles.inputDescription}>Enter the email of an existing user</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="user@example.com"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowCreateModal(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCreate]}
-                onPress={handleCreate}
-                disabled={createMutation.isPending}
-              >
-                {createMutation.isPending ? (
-                  <ActivityIndicator size="small" color={Colors.dark.text} />
-                ) : (
-                  <Text style={styles.modalButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setShowCreateModal(false)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCreate]}
+                  onPress={handleCreate}
+                  disabled={createMutation.isPending}
+                >
+                  {createMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.text} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Add</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
         visible={showEditModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowEditModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContentLarge}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Permissions</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <X size={24} color={Colors.dark.text} />
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowEditModal(false)}
+          />
+          <View style={styles.modalContainerLarge}>
+            <View style={styles.modalContentLarge}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Permissions</Text>
+                <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                  <X size={24} color={Colors.dark.text} />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.selectAllContainer}>
-              <TouchableOpacity
-                style={styles.selectAllButton}
-                onPress={selectAllPermissions}
+              <View style={styles.selectAllContainer}>
+                <TouchableOpacity
+                  style={styles.selectAllButton}
+                  onPress={selectAllPermissions}
+                >
+                  <Text style={styles.selectAllButtonText}>Select All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.selectAllButton}
+                  onPress={deselectAllPermissions}
+                >
+                  <Text style={styles.selectAllButtonText}>Deselect All</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.modalBodyScroll}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.selectAllButtonText}>Select All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.selectAllButton}
-                onPress={deselectAllPermissions}
-              >
-                <Text style={styles.selectAllButtonText}>Deselect All</Text>
-              </TouchableOpacity>
-            </View>
+                {Object.entries(groupedPermissions).map(([groupName, group]) => {
+                  const allGroupSelected = group.permissions.every(p => selectedPermissions.includes(p));
+                  const someGroupSelected = group.permissions.some(p => selectedPermissions.includes(p));
 
-            <ScrollView style={styles.modalBodyScroll}>
-              {Object.entries(groupedPermissions).map(([groupName, group]) => {
-                const allGroupSelected = group.permissions.every(p => selectedPermissions.includes(p));
-                const someGroupSelected = group.permissions.some(p => selectedPermissions.includes(p));
+                  return (
+                    <View key={groupName} style={styles.permissionGroup}>
+                      <TouchableOpacity
+                        style={styles.permissionGroupHeader}
+                        onPress={() => toggleGroupPermissions(group.permissions)}
+                      >
+                        {allGroupSelected ? (
+                          <CheckSquare size={20} color={Colors.dark.primary} />
+                        ) : someGroupSelected ? (
+                          <Square size={20} color={Colors.dark.primary} />
+                        ) : (
+                          <Square size={20} color={Colors.dark.textMuted} />
+                        )}
+                        <Text style={styles.permissionGroupName}>
+                          {groupName.charAt(0).toUpperCase() + groupName.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
 
-                return (
-                  <View key={groupName} style={styles.permissionGroup}>
-                    <TouchableOpacity
-                      style={styles.permissionGroupHeader}
-                      onPress={() => toggleGroupPermissions(group.permissions)}
-                    >
-                      {allGroupSelected ? (
-                        <CheckSquare size={20} color={Colors.dark.primary} />
-                      ) : someGroupSelected ? (
-                        <Square size={20} color={Colors.dark.primary} />
-                      ) : (
-                        <Square size={20} color={Colors.dark.textMuted} />
-                      )}
-                      <Text style={styles.permissionGroupName}>
-                        {groupName.charAt(0).toUpperCase() + groupName.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
+                      {group.permissions.map((permission) => {
+                        const display = getPermissionDisplay(permission);
+                        return (
+                          <TouchableOpacity
+                            key={permission}
+                            style={styles.permissionItem}
+                            onPress={() => togglePermission(permission)}
+                          >
+                            {selectedPermissions.includes(permission) ? (
+                              <CheckSquare size={18} color={Colors.dark.primary} />
+                            ) : (
+                              <Square size={18} color={Colors.dark.textMuted} />
+                            )}
+                            <View style={styles.permissionContent}>
+                              <Text style={styles.permissionTitle} numberOfLines={1}>{display.title}</Text>
+                              {display.description ? (
+                                <Text style={styles.permissionDescription} numberOfLines={2}>
+                                  {display.description}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </ScrollView>
 
-                    {group.permissions.map((permission) => {
-                      const display = getPermissionDisplay(permission);
-                      return (
-                        <TouchableOpacity
-                          key={permission}
-                          style={styles.permissionItem}
-                          onPress={() => togglePermission(permission)}
-                        >
-                          {selectedPermissions.includes(permission) ? (
-                            <CheckSquare size={18} color={Colors.dark.primary} />
-                          ) : (
-                            <Square size={18} color={Colors.dark.textMuted} />
-                          )}
-                          <View style={styles.permissionContent}>
-                            <Text style={styles.permissionTitle} numberOfLines={1}>{display.title}</Text>
-                            {display.description ? (
-                              <Text style={styles.permissionDescription} numberOfLines={2}>
-                                {display.description}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowEditModal(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCreate]}
-                onPress={handleUpdatePermissions}
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? (
-                  <ActivityIndicator size="small" color={Colors.dark.text} />
-                ) : (
-                  <Text style={styles.modalButtonText}>Update</Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setShowEditModal(false)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCreate]}
+                  onPress={handleUpdatePermissions}
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.dark.text} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Update</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -691,9 +713,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.bg,
   },
   header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: Colors.dark.bgSecondary,
     borderBottomWidth: 1,
@@ -701,7 +723,7 @@ const styles = StyleSheet.create({
   },
   headerCount: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   addButton: {
@@ -709,15 +731,15 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 8,
     backgroundColor: Colors.dark.bg,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
   centerContainer: {
     flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     color: Colors.dark.danger,
@@ -735,8 +757,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
   },
   subuserHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 12,
     gap: 12,
   },
@@ -745,13 +767,13 @@ const styles = StyleSheet.create({
   },
   subuserName: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 6,
   },
   emailRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   subuserEmail: {
@@ -769,13 +791,13 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   subuserActions: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     gap: 8,
   },
   actionButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 8,
     gap: 6,
@@ -791,53 +813,70 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: '#fff',
   },
   emptyContainer: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 40,
     gap: 12,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   emptySubtext: {
     fontSize: 14,
     color: Colors.dark.textMuted,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end' as const,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  modalContainerLarge: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '90%',
   },
   modalContent: {
     backgroundColor: Colors.dark.bgSecondary,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   modalContentLarge: {
     backgroundColor: Colors.dark.bgSecondary,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   modalHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.dark.border,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   modalBody: {
@@ -845,11 +884,11 @@ const styles = StyleSheet.create({
   },
   modalBodyScroll: {
     padding: 20,
-    maxHeight: '70%',
+    maxHeight: 400,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 8,
   },
@@ -868,7 +907,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
   },
   selectAllContainer: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 12,
     gap: 12,
@@ -881,21 +920,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: Colors.dark.bg,
     borderRadius: 8,
-    alignItems: 'center' as const,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
   selectAllButtonText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   permissionGroup: {
     marginBottom: 20,
   },
   permissionGroupHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
     padding: 12,
     backgroundColor: Colors.dark.bg,
@@ -904,12 +943,12 @@ const styles = StyleSheet.create({
   },
   permissionGroupName: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   permissionItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
     padding: 12,
     backgroundColor: Colors.dark.bg,
@@ -923,7 +962,7 @@ const styles = StyleSheet.create({
   },
   permissionTitle: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     fontFamily: 'monospace',
   },
@@ -933,7 +972,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   modalFooter: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     padding: 20,
     gap: 12,
     borderTopWidth: 1,
@@ -943,8 +982,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalButtonCancel: {
     backgroundColor: Colors.dark.bg,
@@ -956,12 +995,12 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   modalButtonTextCancel: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.textMuted,
   },
 });
