@@ -16,10 +16,12 @@ export default function ServerConsoleScreen() {
   const [input, setInput] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const bufferRef = useRef<string>('');
 
   useEffect(() => {
+    console.log('[Console Screen] Mounted with id:', id);
+    
     if (!id || !instanceUrl || !authToken) {
+      console.log('[Console Screen] Missing required params');
       setIsInitializing(false);
       return;
     }
@@ -27,61 +29,52 @@ export default function ServerConsoleScreen() {
     websocketConsoleClient.setConfig(instanceUrl, authToken);
     websocketConsoleClient.setServerUuid(id as string);
     
-    websocketConsoleClient.onOutput = (data) => {
-      bufferRef.current += data;
-      
-      const newLines: string[] = [];
-      let remaining = bufferRef.current;
-      
-      while (remaining.length > 0) {
-        const newlineIndex = remaining.indexOf('\n');
-        const daemonIndex = remaining.indexOf('[FeatherPanel Daemon]:', 1);
-        
-        if (newlineIndex === -1 && daemonIndex === -1) {
-          break;
-        }
-        
-        let splitIndex = -1;
-        if (newlineIndex !== -1 && (daemonIndex === -1 || newlineIndex < daemonIndex)) {
-          splitIndex = newlineIndex;
-          newLines.push(remaining.substring(0, splitIndex));
-          remaining = remaining.substring(splitIndex + 1);
-        } else if (daemonIndex !== -1) {
-          splitIndex = daemonIndex;
-          if (splitIndex > 0) {
-            newLines.push(remaining.substring(0, splitIndex));
-          }
-          remaining = remaining.substring(splitIndex);
-          
-          const nextNewline = remaining.indexOf('\n');
-          const nextDaemon = remaining.indexOf('[FeatherPanel Daemon]:', 1);
-          
-          if (nextNewline === -1 && nextDaemon === -1) {
-            break;
-          }
-        }
-      }
-      
-      bufferRef.current = remaining;
-      
-      if (newLines.length > 0) {
-        setLines(prev => [...prev, ...newLines]);
+    const loadInitialLogs = async () => {
+      await websocketConsoleClient.loadFromStorage();
+      const storedLines = websocketConsoleClient.getConsoleLines();
+      console.log('[Console Screen] Loaded stored lines:', storedLines.length);
+      if (storedLines.length > 0) {
+        setLines(storedLines);
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: false });
         }, 100);
       }
     };
 
+    loadInitialLogs();
+    
+    websocketConsoleClient.onOutput = (data) => {
+      console.log('[Console Screen] New output received:', data.substring(0, 50));
+      setLines(prev => {
+        const updated = [...prev, data];
+        return updated.slice(-2000);
+      });
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 50);
+    };
+
     websocketConsoleClient.onConnectionChange = (connected) => {
+      console.log('[Console Screen] Connection status changed:', connected);
       setIsConnected(connected);
+    };
+
+    websocketConsoleClient.onBulkLogsComplete = () => {
+      console.log('[Console Screen] Bulk logs complete callback');
+      const allLines = websocketConsoleClient.getConsoleLines();
+      console.log('[Console Screen] Setting all lines:', allLines.length);
+      setLines(allLines);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 100);
     };
 
     websocketConsoleClient.start();
     setIsInitializing(false);
 
     return () => {
+      console.log('[Console Screen] Unmounting');
       websocketConsoleClient.stop();
-      bufferRef.current = '';
     };
   }, [id, instanceUrl, authToken]);
 
@@ -99,9 +92,10 @@ export default function ServerConsoleScreen() {
     sendCommand();
   }, [sendCommand]);
 
-  const clearConsole = useCallback(() => {
+  const clearConsole = useCallback(async () => {
+    console.log('[Console Screen] Clearing console');
     setLines([]);
-    bufferRef.current = '';
+    await websocketConsoleClient.clearHistory();
   }, []);
 
   const renderLine = (line: string, index: number) => {
@@ -149,6 +143,13 @@ export default function ServerConsoleScreen() {
 
   const isReady = !!instanceUrl && !!authToken && !!id;
   const isDisabled = !isConnected || !isReady;
+
+  console.log('[Console Screen] Render state:', { 
+    linesCount: lines.length, 
+    isConnected, 
+    isReady, 
+    isInitializing 
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
