@@ -1,6 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import {
@@ -35,26 +35,39 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const [apiClient, setApiClient] = useState<AxiosInstance | null>(null);
+  const queryClient = useQueryClient();
 
   const storageQuery = useQuery({
     queryKey: ['appStorage'],
     queryFn: async () => {
-      const [instanceUrl, authToken, userStr] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.INSTANCE_URL),
-        AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
-        AsyncStorage.getItem(STORAGE_KEYS.USER),
-      ]);
+      try {
+        const [instanceUrl, authToken, userStr] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.INSTANCE_URL),
+          AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+          AsyncStorage.getItem(STORAGE_KEYS.USER),
+        ]);
 
-      return {
-        instanceUrl,
-        authToken,
-        user: userStr ? (JSON.parse(userStr) as User) : null,
-      };
+        return {
+          instanceUrl: instanceUrl || null,
+          authToken: authToken || null,
+          user: userStr ? (JSON.parse(userStr) as User) : null,
+        };
+      } catch (error) {
+        console.error('Failed to load storage:', error);
+        return {
+          instanceUrl: null,
+          authToken: null,
+          user: null,
+        };
+      }
     },
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
   });
 
   useEffect(() => {
-    if (storageQuery.data) {
+    if (storageQuery.data && !storageQuery.isLoading) {
       setState({
         instanceUrl: storageQuery.data.instanceUrl,
         authToken: storageQuery.data.authToken,
@@ -62,7 +75,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         isLoading: false,
       });
     }
-  }, [storageQuery.data]);
+  }, [storageQuery.data, storageQuery.isLoading]);
 
   const setInstanceUrl = useCallback(async (url: string) => {
     let cleanUrl = url.trim();
@@ -73,39 +86,61 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
     cleanUrl = cleanUrl.replace(/\/+$/, '');
 
-    await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, cleanUrl);
-    setState((prev) => ({ ...prev, instanceUrl: cleanUrl }));
-  }, []);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, cleanUrl);
+      setState((prev) => ({ ...prev, instanceUrl: cleanUrl }));
+      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+    } catch (error) {
+      console.error('Failed to save instance URL:', error);
+      throw error;
+    }
+  }, [queryClient]);
 
   const setAuth = useCallback(async (cookieHeader: string, user: User) => {
-    await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, cookieHeader),
-      AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user)),
-    ]);
-    setState((prev) => ({ ...prev, authToken: cookieHeader, user }));
-  }, []);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, cookieHeader),
+        AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user)),
+      ]);
+      setState((prev) => ({ ...prev, authToken: cookieHeader, user }));
+      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+    } catch (error) {
+      console.error('Failed to save auth:', error);
+      throw error;
+    }
+  }, [queryClient]);
 
   const clearAuth = useCallback(async () => {
-    await Promise.all([
-      AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
-      AsyncStorage.removeItem(STORAGE_KEYS.USER),
-    ]);
-    setState((prev) => ({ ...prev, authToken: null, user: null }));
-  }, []);
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
+        AsyncStorage.removeItem(STORAGE_KEYS.USER),
+      ]);
+      setState((prev) => ({ ...prev, authToken: null, user: null }));
+      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+    } catch (error) {
+      console.error('Failed to clear auth:', error);
+    }
+  }, [queryClient]);
 
   const clearAll = useCallback(async () => {
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.INSTANCE_URL,
-      STORAGE_KEYS.AUTH_TOKEN,
-      STORAGE_KEYS.USER,
-    ]);
-    setState({
-      instanceUrl: null,
-      authToken: null,
-      user: null,
-      isLoading: false,
-    });
-  }, []);
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.INSTANCE_URL,
+        STORAGE_KEYS.AUTH_TOKEN,
+        STORAGE_KEYS.USER,
+      ]);
+      setState({
+        instanceUrl: null,
+        authToken: null,
+        user: null,
+        isLoading: false,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+    } catch (error) {
+      console.error('Failed to clear all:', error);
+    }
+  }, [queryClient]);
 
   useEffect(() => {
     if (state.instanceUrl) {
@@ -118,6 +153,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           Accept: 'application/json',
         },
         timeout: 15000,
+        withCredentials: true,
       });
 
       client.interceptors.request.use(
@@ -177,10 +213,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
 
-    if (state.instanceUrl && state.authToken) {
+    if (state.instanceUrl && state.authToken && !state.isLoading) {
+      fetchSession().catch((e) => {});
+      
       interval = setInterval(() => {
         fetchSession().catch((e) => {});
-      }, 1000);
+      }, 30000);
     }
 
     return () => {
@@ -188,7 +226,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         clearInterval(interval);
       }
     };
-  }, [state.instanceUrl, state.authToken, fetchSession]);
+  }, [state.instanceUrl, state.authToken, state.isLoading, fetchSession]);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginRequest): Promise<LoginResponse> => {

@@ -58,7 +58,8 @@ export default function AuthScreen() {
       return response.data.data.settings;
     },
     enabled: !!instanceUrl,
-    refetchInterval: 2000,
+    staleTime: 30000,
+    gcTime: 60000,
   });
 
   const turnstileEnabled = settings?.turnstile_enabled === 'true';
