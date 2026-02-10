@@ -162,23 +162,11 @@ export default function AuthScreen() {
           return;
         }
 
-        const res = await login({
+        await login({
           username_or_email: username,
           password,
           turnstile_token: turnstileEnabled ? turnstileToken : undefined,
-        }) as LoginResponse;
-
-        if (!res.success || res.error) {
-          const message = extractApiMessage(res) || 'Authentication failed';
-          setError(message);
-          resetTurnstileWidget();
-          return;
-        }
-
-        if (!res.data?.user) {
-          setError('Authentication failed: no user data returned');
-          return;
-        }
+        });
 
         router.replace('/(tabs)/servers');
       } else {
@@ -188,33 +176,21 @@ export default function AuthScreen() {
           return;
         }
 
-        const res = await register({
+        await register({
           username,
           email,
           password,
           first_name: firstName,
           last_name: lastName,
           turnstile_token: turnstileEnabled ? turnstileToken : undefined,
-        }) as ApiEnvelope<unknown>;
+        });
 
-        if (!res.success || res.error) {
-          const message = extractApiMessage(res) || 'Registration failed';
-          setError(message);
-          resetTurnstileWidget();
-          return;
-        }
-
-        router.replace('/auth');
+        Alert.alert('Success', 'Registration successful! Please login.', [
+          { text: 'OK', onPress: () => setIsLogin(true) }
+        ]);
       }
     } catch (err: any) {
-      const apiEnvelope = (err?.response?.data || err?.data || null) as Partial<ApiEnvelope<unknown>> | null;
-      if (apiEnvelope) {
-        const message = extractApiMessage(apiEnvelope) || 'Authentication failed';
-        setError(message);
-        resetTurnstileWidget();
-        return;
-      }
-      const msg = handleApiError(err);
+      const msg = err?.message || 'Authentication failed';
       setError(msg);
       resetTurnstileWidget();
     } finally {

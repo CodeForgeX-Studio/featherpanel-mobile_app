@@ -18,10 +18,8 @@ export default function ServerConsoleScreen() {
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
 
   useEffect(() => {
-    console.log('[Console Screen] Mounted with id:', id);
     
     if (!id || !instanceUrl || !authToken) {
-      console.log('[Console Screen] Missing required params');
       setIsInitializing(false);
       return;
     }
@@ -32,7 +30,6 @@ export default function ServerConsoleScreen() {
     const loadInitialLogs = async () => {
       await websocketConsoleClient.loadFromStorage();
       const storedLines = websocketConsoleClient.getConsoleLines();
-      console.log('[Console Screen] Loaded stored lines:', storedLines.length);
       if (storedLines.length > 0) {
         setLines(storedLines);
         setTimeout(() => {
@@ -44,7 +41,6 @@ export default function ServerConsoleScreen() {
     loadInitialLogs();
     
     websocketConsoleClient.onOutput = (data) => {
-      console.log('[Console Screen] New output received:', data.substring(0, 50));
       setLines(prev => {
         const updated = [...prev, data];
         return updated.slice(-2000);
@@ -55,14 +51,11 @@ export default function ServerConsoleScreen() {
     };
 
     websocketConsoleClient.onConnectionChange = (connected) => {
-      console.log('[Console Screen] Connection status changed:', connected);
       setIsConnected(connected);
     };
 
     websocketConsoleClient.onBulkLogsComplete = () => {
-      console.log('[Console Screen] Bulk logs complete callback');
       const allLines = websocketConsoleClient.getConsoleLines();
-      console.log('[Console Screen] Setting all lines:', allLines.length);
       setLines(allLines);
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: false });
@@ -73,7 +66,6 @@ export default function ServerConsoleScreen() {
     setIsInitializing(false);
 
     return () => {
-      console.log('[Console Screen] Unmounting');
       websocketConsoleClient.stop();
     };
   }, [id, instanceUrl, authToken]);
@@ -93,7 +85,6 @@ export default function ServerConsoleScreen() {
   }, [sendCommand]);
 
   const clearConsole = useCallback(async () => {
-    console.log('[Console Screen] Clearing console');
     setLines([]);
     await websocketConsoleClient.clearHistory();
   }, []);
@@ -143,13 +134,6 @@ export default function ServerConsoleScreen() {
 
   const isReady = !!instanceUrl && !!authToken && !!id;
   const isDisabled = !isConnected || !isReady;
-
-  console.log('[Console Screen] Render state:', { 
-    linesCount: lines.length, 
-    isConnected, 
-    isReady, 
-    isInitializing 
-  });
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>

@@ -1,7 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import {
   User,
@@ -36,10 +36,13 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const [apiClient, setApiClient] = useState<AxiosInstance | null>(null);
   const queryClient = useQueryClient();
+  const sessionIntervalRef = useRef<NodeJS.Timeout>();
+  const instanceUrlRef = useRef<string | null>(null);
+  const authTokenRef = useRef<string | null>(null);
+  const isInitializedRef = useRef(false);
 
-  const storageQuery = useQuery({
-    queryKey: ['appStorage'],
-    queryFn: async () => {
+  useEffect(() => {
+    const loadStorageDirectly = async () => {
       try {
         const [instanceUrl, authToken, userStr] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.INSTANCE_URL),
@@ -47,35 +50,32 @@ export const [AppProvider, useApp] = createContextHook(() => {
           AsyncStorage.getItem(STORAGE_KEYS.USER),
         ]);
 
-        return {
+        const user = userStr ? (JSON.parse(userStr) as User) : null;
+
+        setState({
           instanceUrl: instanceUrl || null,
           authToken: authToken || null,
-          user: userStr ? (JSON.parse(userStr) as User) : null,
-        };
+          user: user,
+          isLoading: false,
+        });
+
+        instanceUrlRef.current = instanceUrl || null;
+        authTokenRef.current = authToken || null;
+        isInitializedRef.current = true;
       } catch (error) {
         console.error('Failed to load storage:', error);
-        return {
+        setState({
           instanceUrl: null,
           authToken: null,
           user: null,
-        };
+          isLoading: false,
+        });
+        isInitializedRef.current = true;
       }
-    },
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: false,
-  });
+    };
 
-  useEffect(() => {
-    if (storageQuery.data && !storageQuery.isLoading) {
-      setState({
-        instanceUrl: storageQuery.data.instanceUrl,
-        authToken: storageQuery.data.authToken,
-        user: storageQuery.data.user,
-        isLoading: false,
-      });
-    }
-  }, [storageQuery.data, storageQuery.isLoading]);
+    loadStorageDirectly();
+  }, []);
 
   const setInstanceUrl = useCallback(async (url: string) => {
     let cleanUrl = url.trim();
@@ -89,12 +89,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, cleanUrl);
       setState((prev) => ({ ...prev, instanceUrl: cleanUrl }));
-      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+      instanceUrlRef.current = cleanUrl;
     } catch (error) {
       console.error('Failed to save instance URL:', error);
       throw error;
     }
-  }, [queryClient]);
+  }, []);
 
   const setAuth = useCallback(async (cookieHeader: string, user: User) => {
     try {
@@ -103,12 +103,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
         AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user)),
       ]);
       setState((prev) => ({ ...prev, authToken: cookieHeader, user }));
-      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+      authTokenRef.current = cookieHeader;
     } catch (error) {
       console.error('Failed to save auth:', error);
       throw error;
     }
-  }, [queryClient]);
+  }, []);
 
   const clearAuth = useCallback(async () => {
     try {
@@ -117,11 +117,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
         AsyncStorage.removeItem(STORAGE_KEYS.USER),
       ]);
       setState((prev) => ({ ...prev, authToken: null, user: null }));
-      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+      authTokenRef.current = null;
     } catch (error) {
       console.error('Failed to clear auth:', error);
     }
-  }, [queryClient]);
+  }, []);
 
   const clearAll = useCallback(async () => {
     try {
@@ -136,11 +136,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
         user: null,
         isLoading: false,
       });
-      await queryClient.invalidateQueries({ queryKey: ['appStorage'] });
+      instanceUrlRef.current = null;
+      authTokenRef.current = null;
     } catch (error) {
       console.error('Failed to clear all:', error);
     }
-  }, [queryClient]);
+  }, []);
 
   useEffect(() => {
     if (state.instanceUrl) {
@@ -184,13 +185,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [state.instanceUrl, state.authToken, clearAuth]);
 
-  const fetchSession = useCallback(async (): Promise<SessionResponse | null> => {
-    if (!state.instanceUrl || !state.authToken) {
-      return null;
+  const fetchSession = useCallback(async () => {
+    const currentInstanceUrl = instanceUrlRef.current;
+    const currentAuthToken = authTokenRef.current;
+
+    if (!currentInstanceUrl || !currentAuthToken) {
+      return;
     }
 
     try {
-      const client = createApiClient(state.instanceUrl, state.authToken);
+      const client = createApiClient(currentInstanceUrl, currentAuthToken);
       const res = await client.get<SessionResponse>('/api/user/session');
       const data = res.data;
 
@@ -199,34 +203,32 @@ export const [AppProvider, useApp] = createContextHook(() => {
         setState((prev) => ({ ...prev, user: userInfo }));
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userInfo));
       }
-
-      return data;
     } catch (error: any) {
-      const msg = handleApiError(error);
       if (error.response?.status === 401) {
         await clearAuth();
       }
-      throw new Error(msg);
     }
-  }, [state.instanceUrl, state.authToken, clearAuth]);
+  }, [clearAuth]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
+    if (sessionIntervalRef.current) {
+      clearInterval(sessionIntervalRef.current);
+    }
 
-    if (state.instanceUrl && state.authToken && !state.isLoading) {
-      fetchSession().catch((e) => {});
+    if (isInitializedRef.current && instanceUrlRef.current && authTokenRef.current) {
+      fetchSession();
       
-      interval = setInterval(() => {
-        fetchSession().catch((e) => {});
+      sessionIntervalRef.current = setInterval(() => {
+        fetchSession();
       }, 30000);
     }
 
     return () => {
-      if (interval) {
-        clearInterval(interval);
+      if (sessionIntervalRef.current) {
+        clearInterval(sessionIntervalRef.current);
       }
     };
-  }, [state.instanceUrl, state.authToken, state.isLoading, fetchSession]);
+  }, [state.isLoading]);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginRequest): Promise<LoginResponse> => {
@@ -273,7 +275,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     onSuccess: async (data) => {
       if (data.success && !data.error && data.data && data.data.user) {
-        await fetchSession().catch((e) => {});
+        await fetchSession();
       }
     },
   });
