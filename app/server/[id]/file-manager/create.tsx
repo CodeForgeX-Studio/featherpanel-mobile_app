@@ -25,9 +25,16 @@ export default function FileCreateScreen() {
 
       const fullPath = path && path !== '/' ? `${path}/${filename.trim()}` : filename.trim();
       const api = createApiClient(instanceUrl, authToken);
-      const response = await api.post(`/api/user/servers/${id}/write-file`, fileContent || '', {
-        params: { path: `/${fullPath}` }
-      });
+      const response = await api.post(
+        `/api/user/servers/${id}/write-file`, 
+        fileContent || '', 
+        {
+          params: { path: `/${fullPath}` },
+          headers: {
+            'Content-Type': 'text/plain',
+          }
+        }
+      );
 
       if (response.status !== 200) {
         throw new Error(response.data?.error_message || response.data?.message || 'Failed to create file');
