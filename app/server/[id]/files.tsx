@@ -16,6 +16,18 @@ interface FileItem {
   path: string;
 }
 
+const NON_EDITABLE_EXTENSIONS = [
+  '.jar', '.zip', '.tar', '.gz', '.7z', '.rar', '.bz2', '.xz', '.tgz',
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.class', '.pyc', '.o', '.a', '.lib',
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.tiff', '.psd', '.ai',
+  '.mp3', '.mp4', '.avi', '.mov', '.wav', '.flac', '.ogg', '.mkv', '.wmv', '.m4a',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+  '.db', '.sqlite', '.sqlite3', '.mdb', '.accdb',
+  '.ttf', '.otf', '.woff', '.woff2', '.eot',
+  '.iso', '.dmg', '.img', '.vdi', '.vmdk',
+  '.deb', '.rpm', '.apk', '.msi', '.pkg'
+];
+
 export default function ServerFilesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -24,6 +36,11 @@ export default function ServerFilesScreen() {
   const [currentPath, setCurrentPath] = useState('/');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+
+  const isFileEditable = (filename: string): boolean => {
+    const lowerName = filename.toLowerCase();
+    return !NON_EDITABLE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+  };
 
   const {
     data: apiResponse,
@@ -88,6 +105,10 @@ export default function ServerFilesScreen() {
         throw new Error('Missing instanceUrl, authToken or server ID');
       }
 
+      if (!isFileEditable(file.name)) {
+        throw new Error('This file type cannot be edited in the mobile app');
+      }
+
       const api = createApiClient(instanceUrl, authToken);
       const response = await api.get(`/api/user/servers/${id}/file`, {
         params: { path: file.path }
@@ -112,7 +133,29 @@ export default function ServerFilesScreen() {
       });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error?.message || 'Failed to load file content');
+      if (error?.message?.includes('cannot be edited')) {
+        Alert.alert(
+          'Cannot Edit File',
+          'Binary files and archives cannot be edited on mobile. Use the web interface to manage this file.',
+          [
+            { text: 'OK', style: 'cancel' },
+            { 
+              text: 'Open Web', 
+              onPress: async () => {
+                const webUrl = `${instanceUrl}/server/${id}/files`;
+                try {
+                  const supported = await Linking.canOpenURL(webUrl);
+                  if (supported) {
+                    await Linking.openURL(webUrl);
+                  }
+                } catch {}
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', error?.message || 'Failed to load file content');
+      }
     }
   });
 
@@ -179,39 +222,52 @@ export default function ServerFilesScreen() {
         { cancelable: true }
       );
     } else {
-      Alert.alert(
-        'File Options',
-        'Choose an action for this file:',
-        [
-          {
-            text: 'Edit',
-            onPress: () => readFileMutation.mutate(file)
-          },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => {
-              Alert.alert(
-                'Delete File',
-                `Are you sure you want to delete ${file.name}?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Delete', 
-                    style: 'destructive',
-                    onPress: () => deleteMutation.mutate(file)
-                  },
-                ]
-              );
-            }
-          },
-          {
-            text: 'Rename/Copy → Web',
-            onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions')
+      const canEdit = isFileEditable(file.name);
+      const actions = [];
+
+      if (canEdit) {
+        actions.push({
+          text: 'Edit',
+          onPress: () => readFileMutation.mutate(file)
+        });
+      } else {
+        actions.push({
+          text: 'Cannot Edit (Binary)',
+          onPress: () => {
+            Alert.alert(
+              'Cannot Edit',
+              'This file type cannot be edited on mobile. Use the web interface.',
+              [{ text: 'OK' }]
+            );
           }
-        ],
-        { cancelable: true }
-      );
+        });
+      }
+
+      actions.push({
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(
+            'Delete File',
+            `Are you sure you want to delete ${file.name}?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Delete', 
+                style: 'destructive',
+                onPress: () => deleteMutation.mutate(file)
+              },
+            ]
+          );
+        }
+      });
+
+      actions.push({
+        text: 'Rename/Copy → Web',
+        onPress: () => showWebOnlyAlert(file.name, 'Rename, Copy, Move, Permissions')
+      });
+
+      Alert.alert('File Options', 'Choose an action for this file:', actions, { cancelable: true });
     }
   };
 
@@ -298,41 +354,52 @@ export default function ServerFilesScreen() {
         <FlatList
           data={filteredFiles}
           keyExtractor={(item, index) => `${item.path}-${index}`}
-          renderItem={({ item }) => (
-            <View style={styles.fileRow}>
-              <TouchableOpacity
-                style={styles.fileMain}
-                onPress={() => {
-                  if (item.type === 'directory') {
-                    setCurrentPath(item.path);
-                  } else {
-                    readFileMutation.mutate(item);
-                  }
-                }}
-              >
-                <View style={styles.fileIcon}>
-                  {item.type === 'directory' ? (
-                    <Folder size={24} color={Colors.dark.primary} />
-                  ) : (
-                    <View style={styles.fileIconContainer}>
-                      <FileText size={20} color={Colors.dark.textSecondary} />
-                      <Eye size={16} color={Colors.dark.primary} style={styles.editIcon} />
-                    </View>
-                  )}
-                </View>
-                <View style={styles.fileInfo}>
-                  <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.fileSize}>{formatFileSize(item.size)}</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.menuButton}
-                onPress={() => handleMenuPress(item)}
-              >
-                <MoreVertical size={20} color={Colors.dark.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const canEdit = item.type === 'file' && isFileEditable(item.name);
+            return (
+              <View style={styles.fileRow}>
+                <TouchableOpacity
+                  style={styles.fileMain}
+                  onPress={() => {
+                    if (item.type === 'directory') {
+                      setCurrentPath(item.path);
+                    } else if (canEdit) {
+                      readFileMutation.mutate(item);
+                    } else {
+                      Alert.alert(
+                        'Cannot Edit',
+                        'This file type cannot be edited on mobile. Use the web interface.',
+                        [{ text: 'OK' }]
+                      );
+                    }
+                  }}
+                >
+                  <View style={styles.fileIcon}>
+                    {item.type === 'directory' ? (
+                      <Folder size={24} color={Colors.dark.primary} />
+                    ) : (
+                      <View style={styles.fileIconContainer}>
+                        <FileText size={20} color={Colors.dark.textSecondary} />
+                        {canEdit && (
+                          <Eye size={16} color={Colors.dark.primary} style={styles.editIcon} />
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.fileInfo}>
+                    <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.fileSize}>{formatFileSize(item.size)}</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.menuButton}
+                  onPress={() => handleMenuPress(item)}
+                >
+                  <MoreVertical size={20} color={Colors.dark.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            );
+          }}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             searchQuery ? (
