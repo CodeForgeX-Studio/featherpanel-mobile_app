@@ -6,19 +6,20 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import {
   Terminal,
   FolderOpen,
   Database,
   Archive,
   Network,
-  Calendar,
   Users,
-  Settings,
   Play,
   Square,
   RotateCw,
@@ -26,6 +27,7 @@ import {
   Cpu,
   HardDrive,
   MemoryStick,
+  Upload,
 } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
@@ -38,6 +40,19 @@ interface NavigationItem {
   icon: any;
   route: string;
   description: string;
+}
+
+interface LogUploadResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id: string;
+    url: string;
+    raw: string;
+  };
+  error: boolean;
+  error_message: string | null;
+  error_code: string | null;
 }
 
 export default function ServerOverviewScreen() {
@@ -77,6 +92,46 @@ export default function ServerOverviewScreen() {
     },
   });
 
+  const uploadLogsMutation = useMutation({
+    mutationFn: async () => {
+      if (!apiClient || !server?.uuidShort) {
+        throw new Error('API client not initialized or server not loaded');
+      }
+
+      const uploadUrl = `/api/user/servers/${server.uuidShort}/logs/upload`;
+
+      const response = await apiClient.post<LogUploadResponse>(uploadUrl);
+      
+      if (response.status !== 200 || !response.data || !response.data.success) {
+        throw new Error(response.data?.error_message || 'Failed to upload logs');
+      }
+      
+      return response.data;
+    },
+    onSuccess: async (data) => {
+
+      if (!data.data?.url) {
+        Alert.alert('Error', 'No URL returned from server');
+        return;
+      }
+
+      const logUrl = data.data.url;
+      await Clipboard.setStringAsync(logUrl);
+      
+      Alert.alert(
+        'Logs Uploaded',
+        `URL copied to clipboard: ${logUrl}`,
+        [
+          { text: 'Open URL', onPress: () => Linking.openURL(logUrl) },
+          { text: 'Close', style: 'cancel' },
+        ]
+      );
+    },
+    onError: (error: any) => {
+      Alert.alert('Upload Failed', error?.message || 'Failed to upload logs to mclo.gs');
+    },
+  });
+
   const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
     if (powerMutation.isPending || !refetch) return;
     
@@ -85,6 +140,21 @@ export default function ServerOverviewScreen() {
         await refetch();
       }
     });
+  };
+
+  const handleUploadLogs = () => {
+
+    Alert.alert(
+      'Upload Server Logs',
+      'Upload server logs to the cloud and get a URL to share?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Upload', 
+          onPress: () => uploadLogsMutation.mutate(),
+        },
+      ]
+    );
   };
 
   useEffect(() => {
@@ -137,7 +207,8 @@ export default function ServerOverviewScreen() {
   ];
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    const statusLower = status?.toLowerCase() || '';
+    switch (statusLower) {
       case 'running':
         return Colors.dark.success;
       case 'offline':
@@ -173,7 +244,7 @@ export default function ServerOverviewScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.serverHeader}>
+        <View style={styles.serverCard}>
           <View style={styles.serverTitleRow}>
             <Text style={styles.serverName}>{server.name}</Text>
             <View
@@ -207,9 +278,9 @@ export default function ServerOverviewScreen() {
               {server.allocation?.ip}:{server.allocation?.port}
             </Text>
           </View>
-        </View>
 
-        <View style={styles.section}>
+          <View style={styles.divider} />
+
           <Text style={styles.sectionTitle}>Power Controls</Text>
           <View style={styles.powerControls}>
             <TouchableOpacity
@@ -217,7 +288,7 @@ export default function ServerOverviewScreen() {
               onPress={() => handlePowerAction('start')}
               disabled={powerMutation.isPending}
             >
-              <Play size={20} color="#fff" />
+              <Play size={18} color="#fff" />
               <Text style={styles.powerButtonText}>Start</Text>
             </TouchableOpacity>
 
@@ -226,7 +297,7 @@ export default function ServerOverviewScreen() {
               onPress={() => handlePowerAction('stop')}
               disabled={powerMutation.isPending}
             >
-              <Square size={20} color="#fff" />
+              <Square size={18} color="#fff" />
               <Text style={styles.powerButtonText}>Stop</Text>
             </TouchableOpacity>
 
@@ -235,7 +306,7 @@ export default function ServerOverviewScreen() {
               onPress={() => handlePowerAction('restart')}
               disabled={powerMutation.isPending}
             >
-              <RotateCw size={20} color="#fff" />
+              <RotateCw size={18} color="#fff" />
               <Text style={styles.powerButtonText}>Restart</Text>
             </TouchableOpacity>
 
@@ -244,13 +315,31 @@ export default function ServerOverviewScreen() {
               onPress={() => handlePowerAction('kill')}
               disabled={powerMutation.isPending}
             >
-              <Power size={20} color="#fff" />
+              <Power size={18} color="#fff" />
               <Text style={styles.powerButtonText}>Kill</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.section}>
+          <View style={styles.divider} />
+
+          <Text style={styles.sectionTitle}>Log Management</Text>
+          <TouchableOpacity
+            style={styles.uploadLogsButton}
+            onPress={handleUploadLogs}
+            disabled={uploadLogsMutation.isPending}
+          >
+            {uploadLogsMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Upload size={18} color="#fff" />
+                <Text style={styles.uploadLogsButtonText}>Upload server logs to the cloud and get a URL to share</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
           <Text style={styles.sectionTitle}>Resources</Text>
           <View style={styles.resourceGrid}>
             <View style={styles.resourceCard}>
@@ -276,7 +365,7 @@ export default function ServerOverviewScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Management</Text>
+          <Text style={styles.managementTitle}>Management</Text>
           <View style={styles.navGrid}>
             {navigationItems.map((item, index) => {
               const Icon = item.icon;
@@ -307,14 +396,14 @@ const styles = StyleSheet.create({
   },
   centerContainer: {
     flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.dark.bg,
   },
   errorText: {
     color: Colors.dark.danger,
     fontSize: 16,
-    textAlign: 'center' as const,
+    textAlign: 'center',
     paddingHorizontal: 16,
   },
   scrollView: {
@@ -323,7 +412,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
-  serverHeader: {
+  serverCard: {
     backgroundColor: Colors.dark.bgSecondary,
     borderRadius: 16,
     padding: 20,
@@ -332,22 +421,22 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
   },
   serverTitleRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
-    flexWrap: 'wrap' as const,
+    flexWrap: 'wrap',
     gap: 8,
   },
   serverName: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     flex: 1,
   },
   statusBadge: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -360,8 +449,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 13,
-    fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   serverDescription: {
     fontSize: 14,
@@ -371,36 +460,48 @@ const styles = StyleSheet.create({
   },
   serverInfo: {
     gap: 6,
+    marginBottom: 16,
   },
   serverInfoText: {
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
   serverInfoLabel: {
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.dark.border,
+    marginVertical: 20,
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
+  managementTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 12,
   },
   powerControls: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   powerButton: {
     flex: 1,
-    minWidth: 150,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    paddingVertical: 14,
+    minWidth: 140,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
   },
@@ -417,26 +518,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   powerButtonText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
+    fontSize: 14,
+    fontWeight: '600',
     color: '#fff',
   },
+  uploadLogsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  uploadLogsButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    flex: 1,
+  },
   resourceGrid: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     gap: 12,
   },
   resourceCard: {
     flex: 1,
-    backgroundColor: Colors.dark.bgSecondary,
+    backgroundColor: Colors.dark.bg,
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center' as const,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
   resourceValue: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginTop: 8,
   },
@@ -457,7 +574,7 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginTop: 8,
     marginBottom: 4,
