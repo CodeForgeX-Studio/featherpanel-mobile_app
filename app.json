@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "mobile.featherpanel.com",
+      "bundleIdentifier": "featherpanel.app.codeforgex.studio",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -25,7 +25,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "mobile.featherpanel.com"
+      "package": "featherpanel.app.codeforgex.studio"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
