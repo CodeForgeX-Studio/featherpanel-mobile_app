@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
@@ -8,10 +8,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 export default function InstanceSetupScreen() {
+  const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [useHttps, setUseHttps] = useState(true);
   const [error, setError] = useState('');
-  const { setInstanceUrl } = useApp();
+  const { saveInstance, setInstanceUrl } = useApp();
   const router = useRouter();
 
   const validateUrl = (input: string): boolean => {
@@ -23,16 +24,16 @@ export default function InstanceSetupScreen() {
     }
   };
 
-  const handleContinue = async () => {
+  const handleSaveAndContinue = async () => {
     setError('');
-    
-    if (!url.trim()) {
-      setError('Please enter a domain');
+
+    if (!name.trim() || !url.trim()) {
+      setError('Please enter a name and URL');
       return;
     }
 
     let cleanUrl = url.trim();
-    
+
     if (!cleanUrl.includes('://')) {
       const protocol = useHttps ? 'https://' : 'http://';
       cleanUrl = `${protocol}${cleanUrl}`;
@@ -43,34 +44,56 @@ export default function InstanceSetupScreen() {
     }
 
     if (!validateUrl(cleanUrl)) {
-      setError('Please enter a valid domain');
+      setError('Please enter a valid URL');
       return;
     }
 
-    await setInstanceUrl(cleanUrl);
-    router.replace('/auth');
+    try {
+      await saveInstance(name, cleanUrl);
+      await setInstanceUrl(cleanUrl);
+      router.replace('/auth');
+    } catch (error) {
+      setError('Failed to save instance');
+    }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
             <Image
               source={require('@/assets/images/featherpanel-logo.png')}
               style={styles.logo}
               contentFit="contain"
             />
-            <Text style={styles.title}>Welcome to FeatherPanel</Text>
+            <Text style={styles.title}>Add New Instance</Text>
             <Text style={styles.subtitle}>
-              Enter your FeatherPanel instance URL to get started
+              Enter a name and URL for your FeatherPanel instance
             </Text>
           </View>
 
           <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Instance Name</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="My FeatherPanel"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Instance URL</Text>
               <View style={styles.inputWrapper}>
@@ -80,16 +103,10 @@ export default function InstanceSetupScreen() {
                   placeholder="panel.example.com"
                   placeholderTextColor={Colors.dark.textMuted}
                   value={url}
-                  onChangeText={(text) => {
-                    setUrl(text);
-                    setError('');
-                  }}
+                  onChangeText={setUrl}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="url"
-                  returnKeyType="go"
-                  onSubmitEditing={handleContinue}
-                  testID="instance-url-input"
                 />
               </View>
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -98,9 +115,9 @@ export default function InstanceSetupScreen() {
             <View style={styles.protocolSection}>
               <Text style={styles.protocolLabel}>Protocol</Text>
               <Text style={styles.protocolDescription}>Tap to toggle between HTTP/HTTPS</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.protocolToggle, 
+                  styles.protocolToggle,
                   useHttps && styles.protocolToggleActive
                 ]}
                 onPress={() => setUseHttps(!useHttps)}
@@ -108,13 +125,13 @@ export default function InstanceSetupScreen() {
               >
                 <View style={styles.protocolContent}>
                   <View style={[
-                    styles.protocolIcon, 
+                    styles.protocolIcon,
                     useHttps ? styles.httpsIcon : styles.httpIcon
                   ]}>
                     {useHttps ? <Lock size={18} color={Colors.dark.primary} /> : <Globe size={18} color={Colors.dark.textMuted} />}
                   </View>
                   <Text style={[
-                    styles.protocolText, 
+                    styles.protocolText,
                     useHttps ? styles.protocolTextActive : styles.protocolTextInactive
                   ]}>
                     {useHttps ? 'https:// (recommended)' : 'http://'}
@@ -125,19 +142,12 @@ export default function InstanceSetupScreen() {
 
             <TouchableOpacity
               style={styles.button}
-              onPress={handleContinue}
-              testID="continue-button"
+              onPress={handleSaveAndContinue}
+              testID="save-instance-button"
             >
-              <Text style={styles.buttonText}>Continue</Text>
+              <Text style={styles.buttonText}>Save and Continue</Text>
               <ArrowRight size={20} color={Colors.dark.text} />
             </TouchableOpacity>
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don't have an instance? Contact your hosting provider or visit
-            </Text>
-            <Text style={styles.footerLink}>featherpanel.com</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -146,7 +156,7 @@ export default function InstanceSetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.dark.bg,
   },
@@ -155,46 +165,47 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 32,
   },
   header: {
-    alignItems: 'center' as const,
-    marginTop: 40,
-    marginBottom: 48,
+    alignItems: 'center',
+    marginBottom: 32,
   },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 24,
+    width: 80,
+    height: 80,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700' as const,
+    fontSize: 24,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 8,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: Colors.dark.textSecondary,
-    textAlign: 'center' as const,
-    paddingHorizontal: 20,
+    textAlign: 'center',
+    marginBottom: 32,
   },
   form: {
     flex: 1,
   },
   inputContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 8,
   },
   inputWrapper: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.dark.bgSecondary,
     borderRadius: 12,
     borderWidth: 1,
@@ -220,7 +231,7 @@ const styles = StyleSheet.create({
   },
   protocolLabel: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -228,7 +239,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
     marginBottom: 12,
-    lineHeight: 20,
   },
   protocolToggle: {
     backgroundColor: Colors.dark.bgSecondary,
@@ -242,16 +252,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.primary,
   },
   protocolContent: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   protocolIcon: {
     marginRight: 12,
     width: 24,
     height: 24,
     borderRadius: 6,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   httpsIcon: {
     backgroundColor: Colors.dark.primary + '20',
@@ -261,8 +271,7 @@ const styles = StyleSheet.create({
   },
   protocolText: {
     fontSize: 16,
-    fontFamily: 'monospace' as const,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
   protocolTextActive: {
     color: Colors.dark.primary,
@@ -272,31 +281,17 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: Colors.dark.primary,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
+    marginTop: 8,
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
-  },
-  footer: {
-    alignItems: 'center' as const,
-    paddingTop: 32,
-  },
-  footerText: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-    textAlign: 'center' as const,
-    marginBottom: 4,
-  },
-  footerLink: {
-    fontSize: 14,
-    color: Colors.dark.primary,
-    fontWeight: '600' as const,
   },
 });

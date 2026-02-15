@@ -13,17 +13,25 @@ import {
 } from '@/types/api';
 import { createApiClient, handleApiError } from '@/lib/api';
 
+interface SavedInstance {
+  id: string;
+  name: string;
+  url: string;
+}
+
 interface AppState {
   instanceUrl: string | null;
   authToken: string | null;
   user: User | null;
   isLoading: boolean;
+  savedInstances: SavedInstance[];
 }
 
 const STORAGE_KEYS = {
   INSTANCE_URL: 'featherpanel_instance_url',
   AUTH_TOKEN: 'featherpanel_auth_token',
   USER: 'featherpanel_user',
+  SAVED_INSTANCES: 'featherpanel_saved_instances',
 };
 
 export const [AppProvider, useApp] = createContextHook(() => {
@@ -32,6 +40,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     authToken: null,
     user: null,
     isLoading: true,
+    savedInstances: [],
   });
 
   const [apiClient, setApiClient] = useState<AxiosInstance | null>(null);
@@ -44,19 +53,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     const loadStorageDirectly = async () => {
       try {
-        const [instanceUrl, authToken, userStr] = await Promise.all([
+        const [instanceUrl, authToken, userStr, savedInstancesStr] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.INSTANCE_URL),
           AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
           AsyncStorage.getItem(STORAGE_KEYS.USER),
+          AsyncStorage.getItem(STORAGE_KEYS.SAVED_INSTANCES),
         ]);
 
         const user = userStr ? (JSON.parse(userStr) as User) : null;
+        const savedInstances = savedInstancesStr ? (JSON.parse(savedInstancesStr) as SavedInstance[]) : [];
 
         setState({
           instanceUrl: instanceUrl || null,
           authToken: authToken || null,
           user: user,
           isLoading: false,
+          savedInstances: savedInstances || [],
         });
 
         instanceUrlRef.current = instanceUrl || null;
@@ -69,6 +81,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           authToken: null,
           user: null,
           isLoading: false,
+          savedInstances: [],
         });
         isInitializedRef.current = true;
       }
@@ -84,7 +97,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       cleanUrl = 'https://' + cleanUrl;
     }
 
-    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    cleanUrl = cleanUrl.replace(/\/$/, '');
 
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, cleanUrl);
@@ -135,11 +148,60 @@ export const [AppProvider, useApp] = createContextHook(() => {
         authToken: null,
         user: null,
         isLoading: false,
+        savedInstances: state.savedInstances,
       });
       instanceUrlRef.current = null;
       authTokenRef.current = null;
     } catch (error) {
       console.error('Failed to clear all:', error);
+    }
+  }, [state.savedInstances]);
+
+  const saveInstance = useCallback(async (name: string, url: string) => {
+    let cleanUrl = url.trim();
+
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+
+    cleanUrl = cleanUrl.replace(/\/$/, '');
+
+    const newInstance: SavedInstance = {
+      id: Date.now().toString(),
+      name,
+      url: cleanUrl,
+    };
+
+    try {
+      const existingInstances = state.savedInstances || [];
+      const updatedInstances = [...existingInstances, newInstance];
+      await AsyncStorage.setItem(STORAGE_KEYS.SAVED_INSTANCES, JSON.stringify(updatedInstances));
+      setState((prev) => ({ ...prev, savedInstances: updatedInstances }));
+    } catch (error) {
+      console.error('Failed to save instance:', error);
+      throw error;
+    }
+  }, [state.savedInstances]);
+
+  const deleteInstance = useCallback(async (id: string) => {
+    try {
+      const updatedInstances = state.savedInstances.filter((instance) => instance.id !== id);
+      await AsyncStorage.setItem(STORAGE_KEYS.SAVED_INSTANCES, JSON.stringify(updatedInstances));
+      setState((prev) => ({ ...prev, savedInstances: updatedInstances }));
+    } catch (error) {
+      console.error('Failed to delete instance:', error);
+      throw error;
+    }
+  }, [state.savedInstances]);
+
+  const selectInstance = useCallback(async (instance: SavedInstance) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, instance.url);
+      setState((prev) => ({ ...prev, instanceUrl: instance.url }));
+      instanceUrlRef.current = instance.url;
+    } catch (error) {
+      console.error('Failed to select instance:', error);
+      throw error;
     }
   }, []);
 
@@ -217,7 +279,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
     if (isInitializedRef.current && instanceUrlRef.current && authTokenRef.current) {
       fetchSession();
-      
+
       sessionIntervalRef.current = setInterval(() => {
         fetchSession();
       }, 30000);
@@ -335,6 +397,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setAuth,
     clearAuth,
     clearAll,
+    saveInstance,
+    deleteInstance,
+    selectInstance,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,

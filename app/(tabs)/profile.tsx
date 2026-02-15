@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIn
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
-import { LogOut, Settings, Info, FileClock, ExternalLink, Shield, Globe, User as UserIcon, Lock, Network, } from 'lucide-react-native';
+import { LogOut, Settings, Info, FileClock, ExternalLink, Shield, Globe, User as UserIcon, Lock, Network, List } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -18,6 +18,7 @@ export default function ProfileScreen() {
     isLogoutLoading,
     fetchSession,
     authToken,
+    savedInstances,
   } = useApp();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
@@ -45,8 +46,7 @@ export default function ProfileScreen() {
             try {
               await logout();
               router.replace('/auth');
-            } catch {
-            }
+            } catch {}
           },
         },
       ]
@@ -193,6 +193,14 @@ export default function ProfileScreen() {
             <FileClock size={20} color={Colors.dark.textSecondary} />
             <Text style={styles.menuItemText}>Activity Log</Text>
             <ExternalLink size={16} color={Colors.dark.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/saved-instances')}
+          >
+            <List size={20} color={Colors.dark.textSecondary} />
+            <Text style={styles.menuItemText}>Saved Instances</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

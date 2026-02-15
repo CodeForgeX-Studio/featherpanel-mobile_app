@@ -40,7 +40,7 @@ export default function AuthScreen() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
-  const { login, register, isLoginLoading, isRegisterLoading, instanceUrl } = useApp();
+  const { login, register, isLoginLoading, isRegisterLoading, instanceUrl, savedInstances } = useApp();
   const router = useRouter();
 
   const {
@@ -72,12 +72,12 @@ export default function AuthScreen() {
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
       <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
       <style>
-        * { 
-          box-sizing: border-box; 
-          margin: 0; 
-          padding: 0; 
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
         }
-        html, body { 
+        html, body {
           width: 100%;
           height: 100%;
           overflow: hidden;
@@ -101,29 +101,29 @@ export default function AuthScreen() {
     </head>
     <body>
       <div id="turnstile-container">
-        <div class="cf-turnstile" 
-             data-sitekey="${turnstileKey}" 
-             data-theme="dark" 
-             data-size="large"
-             data-callback="onTurnstileSuccess"
-             data-expired-callback="onTurnstileExpired"
-             data-error-callback="onTurnstileError">
+        <div class="cf-turnstile"
+          data-sitekey="${turnstileKey}"
+          data-theme="dark"
+          data-size="large"
+          data-callback="onTurnstileSuccess"
+          data-expired-callback="onTurnstileExpired"
+          data-error-callback="onTurnstileError">
         </div>
       </div>
-      
+
       <script>
         function onTurnstileSuccess(token) {
           window.ReactNativeWebView.postMessage('turnstile:' + token);
         }
-        
+
         function onTurnstileExpired() {
           window.ReactNativeWebView.postMessage('turnstile:expired');
         }
-        
+
         function onTurnstileError() {
           window.ReactNativeWebView.postMessage('turnstile:error');
         }
-        
+
         window.addEventListener('message', function(event) {
           if (event.data === 'reset') {
             if (window.turnstile) {
@@ -237,14 +237,7 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={styles.instanceUrlBadge}
               onPress={() => {
-                Alert.alert(
-                  'Change Instance',
-                  'Do you want to change your FeatherPanel instance?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Change', onPress: () => router.replace('/instance-setup') },
-                  ]
-                );
+                router.push('/saved-instances');
               }}
               disabled={isButtonLoading || isSettingsLoading}
             >
@@ -353,10 +346,7 @@ export default function AuthScreen() {
                 <View style={styles.turnstileContainer}>
                   <WebView
                     ref={webViewRef}
-                    source={{ 
-                      html: turnstileHtml,
-                      baseUrl: instanceUrl 
-                    }}
+                    source={{ html: turnstileHtml, baseUrl: instanceUrl }}
                     style={styles.turnstileWebView}
                     onMessage={(event) => {
                       const data = event.nativeEvent.data;

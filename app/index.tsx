@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import Colors from '@/constants/colors';
 
 export default function Index() {
-  const { instanceUrl, authToken, user, isLoading } = useApp();
+  const { instanceUrl, authToken, user, isLoading, savedInstances } = useApp();
 
   if (isLoading) {
     return (
@@ -15,8 +15,12 @@ export default function Index() {
     );
   }
 
-  if (!instanceUrl) {
+  if (!instanceUrl && savedInstances.length === 0) {
     return <Redirect href="/instance-setup" />;
+  }
+
+  if (!instanceUrl && savedInstances.length > 0) {
+    return <Redirect href="/saved-instances" />;
   }
 
   if (!authToken || !user) {
