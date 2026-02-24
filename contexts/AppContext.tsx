@@ -19,6 +19,10 @@ interface SavedInstance {
   url: string;
 }
 
+interface TwoFactorData {
+  email: string;
+}
+
 interface AppState {
   instanceUrl: string | null;
   authToken: string | null;
@@ -343,30 +347,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
         withCredentials: true,
       });
 
-      try {
-        const response = await client.put<LoginResponse>('/api/user/auth/login', {
-          username_or_email: credentials.username_or_email,
-          password: credentials.password,
-          turnstile_token: credentials.turnstile_token || '',
-        });
+      const response = await client.put<LoginResponse>('/api/user/auth/login', {
+        username_or_email: credentials.username_or_email,
+        password: credentials.password,
+        turnstile_token: credentials.turnstile_token || '',
+      });
 
-        const setCookie = response.headers['set-cookie'];
+      const setCookie = response.headers['set-cookie'];
 
-        if (setCookie && Array.isArray(setCookie) && setCookie.length > 0) {
-          const raw = setCookie[0];
-          const cookieHeader = raw.split(';')[0] + ';';
+      if (setCookie && Array.isArray(setCookie) && setCookie.length > 0) {
+        const raw = setCookie[0];
+        const cookieHeader = raw.split(';')[0] + ';';
 
-          if (response.data.success && !response.data.error && response.data.data && response.data.data.user) {
-            const user = response.data.data.user as User;
-            await setAuth(cookieHeader, user);
-          }
+        if (response.data.success && !response.data.error && response.data.data && response.data.data.user) {
+          const user = response.data.data.user as User;
+          await setAuth(cookieHeader, user);
         }
-
-        return response.data;
-      } catch (error: any) {
-        const msg = handleApiError(error);
-        throw new Error(msg);
       }
+
+      return response.data;
     },
     onSuccess: async (data) => {
       if (data.success && !data.error && data.data && data.data.user) {
@@ -420,6 +419,39 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
   });
 
+  const twoFactorVerify = useMutation({
+    mutationFn: async (payload: { email: string; code: string }): Promise<LoginResponse> => {
+      if (!state.instanceUrl) {
+        throw new Error('Instance URL not set');
+      }
+
+      const cleanUrl = state.instanceUrl.replace(/\/$/, '');
+      const client = createApiClient(cleanUrl, '');
+
+      const response = await client.post<LoginResponse>('/api/user/auth/two-factor', {
+        email: payload.email,
+        code: payload.code.trim(),
+      });
+
+      const user = response.data?.data as unknown as User;
+      const setCookie = response.headers['set-cookie'];
+
+      if (user && setCookie) {
+        const cookieHeader = Array.isArray(setCookie)
+          ? setCookie[0].split(';')[0] + ';'
+          : (setCookie as string).split(';')[0] + ';';
+        await setAuth(cookieHeader, user);
+      }
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data.success && !data.error && data.data && data.data.user) {
+        fetchSession();
+      }
+    },
+  });
+
   const canChangeInstanceUrl = !state.authToken;
 
   return {
@@ -436,6 +468,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     selectInstance,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
+    twoFactorVerify: twoFactorVerify.mutateAsync,
     logout: logoutMutation.mutateAsync,
     isLoginLoading: loginMutation.isPending,
     isRegisterLoading: registerMutation.isPending,
