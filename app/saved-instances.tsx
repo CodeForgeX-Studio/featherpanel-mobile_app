@@ -14,7 +14,6 @@ export default function SavedInstancesScreen() {
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
 
-  // Reset naar instance-setup als er geen instances meer zijn
   useEffect(() => {
     if (savedInstances.length === 0) {
       clearAll().then(() => {
@@ -132,7 +131,6 @@ export default function SavedInstancesScreen() {
         }
       />
 
-      {/* Modal voor toevoegen/bewerken */}
       <Modal
         visible={isModalVisible}
         animationType="fade"

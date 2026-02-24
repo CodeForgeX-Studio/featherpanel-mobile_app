@@ -1,40 +1,40 @@
 {
   "expo": {
-    "name": "FeatherPanel",
+    "name": "FeatherPanel Mobile",
     "slug": "featherpanel-mobile-app",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "expo",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0F14"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "featherpanel.app.codeforgex.studio",
+      "bundleIdentifier": "com.featherpanel.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#000000"
       },
-      "package": "featherpanel.app.codeforgex.studio"
+      "package": "com.featherpanel.app"
     },
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/logo.png"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://featherpanel.com/"
+          "origin": "https://featherpanel.app/"
         }
       ],
       "expo-font",
@@ -45,7 +45,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://featherpanel.com/"
+        "origin": "https://featherpanel.app/"
       },
       "eas": {
         "projectId": "73184916-7a9c-4e65-802d-c9db1ae1f2dd"

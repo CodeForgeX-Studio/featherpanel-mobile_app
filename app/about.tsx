@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { Globe, Github, MessageCircle, ExternalLink, ArrowLeft, Shield, Code } from 'lucide-react-native';
+import { Globe, Github, MessageCircle, ExternalLink, ArrowLeft, Code } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
@@ -56,11 +56,11 @@ export default function AboutScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoSection}>
           <Image
-            source={require('@/assets/images/featherpanel-logo.png')}
+            source={require('@/assets/images/logo.png')}
             style={styles.logo}
             contentFit="contain"
           />
-          <Text style={styles.appName}>FeatherPanel</Text>
+          <Text style={styles.appName}>FeatherPanel Mobile</Text>
           <Text style={styles.version}>Version 1.0.0</Text>
         </View>
 
@@ -97,14 +97,15 @@ export default function AboutScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Credits</Text>
-          
+
           <View style={styles.creditCard}>
             <View style={styles.creditHeader}>
               <Shield size={20} color={Colors.dark.primary} />
               <Text style={styles.creditTitle}>FeatherPanel</Text>
             </View>
             <Text style={styles.creditText}>
-              Developed and maintained by MythicalSystems Studios
+              Official FeatherPanel platform is maintained by its respective team. 
+              This mobile app is developed independently for the FeatherPanel platform.
             </Text>
           </View>
 
@@ -114,18 +115,18 @@ export default function AboutScreen() {
               <Text style={styles.creditTitle}>Mobile App</Text>
             </View>
             <Text style={styles.creditText}>
-              Built by CodeForgeX Studio in collaboration with MythicalSystems Studios. 
-              We are authorized to develop, publish, and distribute this mobile 
-              application under our own name.
+              FeatherPanel Mobile is developed, published, and operated by 
+              CodeForgeX Studio. This app is created for FeatherPanel users 
+              and is not affiliated with any other organization.
             </Text>
           </View>
         </View>
 
         <View style={styles.disclaimerSection}>
           <Text style={styles.disclaimerText}>
-            FeatherPanel is a trademark of MythicalSystems Studios. 
-            This mobile app is an authorized third-party client developed 
-            by CodeForgeX Studio.
+            FeatherPanel is a trademark of the MythicalSystems Studios project. 
+            This mobile app is an independent client developed by CodeForgeX Studio 
+            and is not associated with any other entities.
           </Text>
         </View>
 
@@ -134,7 +135,7 @@ export default function AboutScreen() {
             © {new Date().getFullYear()} CodeForgeX Studio
           </Text>
           <Text style={styles.footerSubtext}>
-            In collaboration with MythicalSystems Studios
+            Independent FeatherPanel mobile client
           </Text>
         </View>
       </ScrollView>

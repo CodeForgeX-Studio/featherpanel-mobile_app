@@ -69,7 +69,7 @@ export default function InstanceSetupScreen() {
         >
           <View style={styles.header}>
             <Image
-              source={require('@/assets/images/featherpanel-logo.png')}
+              source={require('@/assets/images/logo.png')}
               style={styles.logo}
               contentFit="contain"
             />

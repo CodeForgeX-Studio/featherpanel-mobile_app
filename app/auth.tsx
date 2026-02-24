@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -186,7 +187,7 @@ export default function AuthScreen() {
         });
 
         Alert.alert('Success', 'Registration successful! Please login.', [
-          { text: 'OK', onPress: () => setIsLogin(true) }
+          { text: 'OK', onPress: () => setIsLogin(true) },
         ]);
       }
     } catch (err: any) {
@@ -225,7 +226,7 @@ export default function AuthScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Image
-              source={require('@/assets/images/featherpanel-logo.png')}
+              source={require('@/assets/images/logo.png')}
               style={styles.logo}
               contentFit="contain"
             />
@@ -234,19 +235,19 @@ export default function AuthScreen() {
               {isLogin ? 'Login to manage your servers' : 'Register to get started'}
             </Text>
 
-            <TouchableOpacity
+            <Pressable
               style={styles.instanceUrlBadge}
               onPress={() => {
                 router.push('/saved-instances');
               }}
-              disabled={isButtonLoading || isSettingsLoading}
+              disabled={isButtonLoading}
             >
               <Globe size={16} color={Colors.dark.primary} />
               <Text style={styles.instanceUrlText} numberOfLines={1}>
                 {instanceUrl ? new URL(instanceUrl).hostname : 'No instance'}
               </Text>
               <Edit2 size={14} color={Colors.dark.textMuted} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
 
           <View style={styles.form}>
