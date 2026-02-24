@@ -14,6 +14,7 @@ export const createApiClient = (
     'Accept-Language': 'en-US,en;q=0.9,en-GB;q=0.8,de;q=0.7',
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Mobile Safari/537.36 FeatherPanel Mobile/1.0 (https://featherpanel.app)',
   };
 
   if (isNode && authToken) {
