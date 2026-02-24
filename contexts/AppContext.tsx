@@ -194,6 +194,39 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [state.savedInstances]);
 
+  const updateInstance = useCallback(
+    async (id: string, name: string, url: string): Promise<void> => {
+      const instance = state.savedInstances.find((inst) => inst.id === id);
+      if (!instance) {
+        throw new Error('Instance not found');
+      }
+
+      let cleanUrl = url.trim();
+
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = 'https://' + cleanUrl;
+      }
+
+      cleanUrl = cleanUrl.replace(/\/$/, '');
+
+      const updatedInstance: SavedInstance = {
+        id,
+        name: name.trim(),
+        url: cleanUrl,
+      };
+
+      try {
+        const updatedInstances = state.savedInstances.map((inst) => (inst.id === id ? updatedInstance : inst));
+        await AsyncStorage.setItem(STORAGE_KEYS.SAVED_INSTANCES, JSON.stringify(updatedInstances));
+        setState((prev) => ({ ...prev, savedInstances: updatedInstances }));
+      } catch (error) {
+        console.error('Failed to update instance:', error);
+        throw error;
+      }
+    },
+    [state.savedInstances]
+  );
+
   const selectInstance = useCallback(async (instance: SavedInstance) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.INSTANCE_URL, instance.url);
@@ -399,6 +432,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     clearAll,
     saveInstance,
     deleteInstance,
+    updateInstance,
     selectInstance,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,

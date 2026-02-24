@@ -197,14 +197,6 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/saved-instances')}
-          >
-            <List size={20} color={Colors.dark.textSecondary} />
-            <Text style={styles.menuItemText}>Saved Instances</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
             onPress={handleResetInstance}
           >
             <Settings size={20} color={Colors.dark.textSecondary} />
