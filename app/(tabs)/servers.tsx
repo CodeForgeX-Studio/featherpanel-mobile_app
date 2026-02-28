@@ -112,8 +112,9 @@ export default function ServersScreen() {
     refetch();
   }, [refetch]);
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusColor = (status: string | null | undefined) => {
+    const safeStatus = status?.toLowerCase() || 'unknown';
+    switch (safeStatus) {
       case 'running':
         return Colors.dark.success;
       case 'offline':
@@ -128,62 +129,86 @@ export default function ServersScreen() {
     }
   };
 
-  const renderServer = ({ item }: { item: Server }) => (
-    <TouchableOpacity
-      style={styles.serverCard}
-      onPress={() => {
-        router.push(`/server/${item.uuidShort}`);
-      }}
-      testID={`server-${item.uuidShort}`}
-    >
-      <View style={styles.serverHeader}>
-        <View style={styles.serverIcon}>
-          <ServerIcon size={24} color={Colors.dark.primary} />
-        </View>
-        <View style={styles.serverInfo}>
-          <Text style={styles.serverName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {item.description && (
-            <Text style={styles.serverDescription} numberOfLines={1}>
-              {item.description}
+  const isServerUnavailable = (status: string | null | undefined) => {
+    const safeStatus = status?.toLowerCase() || 'unknown';
+    return safeStatus === 'unknown';
+  };
+
+  const unavailableServersCount = servers.filter(s => isServerUnavailable(s.status)).length;
+
+  const renderServer = ({ item }: { item: Server }) => {
+    const unavailable = isServerUnavailable(item.status);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.serverCard, 
+          unavailable && styles.serverCardDisabled
+        ]}
+        onPress={unavailable ? undefined : () => {
+          router.push(`/server/${item.uuidShort}`);
+        }}
+        testID={`server-${item.uuidShort}`}
+        disabled={unavailable}
+      >
+        <View style={styles.serverHeader}>
+          <View style={styles.serverIcon}>
+            <ServerIcon size={24} color={Colors.dark.primary} />
+          </View>
+          <View style={styles.serverInfo}>
+            <Text style={styles.serverName} numberOfLines={1}>
+              {item.name}
             </Text>
-          )}
+            {item.description && (
+              <Text style={styles.serverDescription} numberOfLines={1}>
+                {item.description}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {item.status || 'Unknown'}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-            {item.status}
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.serverDetails}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>CPU Limit</Text>
-          <Text style={styles.detailValue}>{item.cpu}%</Text>
+        <View style={styles.serverDetails}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>CPU Limit</Text>
+            <Text style={styles.detailValue}>{item.cpu}%</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Memory</Text>
+            <Text style={styles.detailValue}>{Math.round(item.memory / 1024)} GB</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Disk</Text>
+            <Text style={styles.detailValue}>{Math.round(item.disk / 1024)} GB</Text>
+          </View>
         </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Memory</Text>
-          <Text style={styles.detailValue}>{Math.round(item.memory / 1024)} GB</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Disk</Text>
-          <Text style={styles.detailValue}>{Math.round(item.disk / 1024)} GB</Text>
-        </View>
-      </View>
 
-      {item.allocation && (
-        <View style={styles.allocationInfo}>
-          <Text style={styles.allocationText}>
-            {item.allocation.ip}:{item.allocation.port}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        {item.allocation && (
+          <View style={styles.allocationInfo}>
+            <Text style={styles.allocationText}>
+              {item.allocation.ip}:{item.allocation.port}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {unavailableServersCount > 0 && (
+        <View style={styles.warningBanner}>
+          <AlertCircle size={20} color={Colors.dark.warning} style={styles.warningIcon} />
+          <Text style={styles.warningText}>
+            {unavailableServersCount} server(s) unavailable. This may be due to node issues or temporary server unavailability.
+          </Text>
+        </View>
+      )}
+      
       <FlatList
         data={servers}
         renderItem={renderServer}
@@ -233,6 +258,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  serverCardDisabled: {
+    opacity: 0.5,
   },
   serverHeader: {
     flexDirection: 'row' as const,
@@ -297,6 +325,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.primary,
     fontFamily: 'monospace' as const,
+  },
+  warningBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: Colors.dark.warning + '20',
+    padding: 12,
+    margin: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.dark.warning + '40',
+  },
+  warningIcon: {
+    marginRight: 12,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.dark.warning,
+    fontWeight: '500' as const,
   },
   emptyContainer: {
     flex: 1,

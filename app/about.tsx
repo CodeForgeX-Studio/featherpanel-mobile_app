@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { Globe, Github, MessageCircle, ExternalLink, ArrowLeft, Code } from 'lucide-react-native';
+import { Globe, Github, MessageCircle, ExternalLink, ArrowLeft, Code, Shield } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
